@@ -1,0 +1,1592 @@
+import { useEffect, useState } from "react";
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+
+import sofradoresLogo from "./assets/sofredores-logo.png";
+import { DashboardPage } from "./pages/DashboardPage";
+import { AccountsPage } from "./pages/AccountsPage";
+import { CommonUserPortalPage } from "./pages/CommonUserPortalPage";
+import { LoginPage } from "./pages/LoginPage";
+import { PreMatchPage } from "./pages/PreMatchPage";
+import { RosterPage } from "./pages/RosterPage";
+import type { TransactionFormValues } from "./features/dashboard/contracts";
+import type {
+  DashboardPaymentRankingEntry,
+  DashboardPresenceRankingEntry,
+  DashboardSeasonOverviewSnapshot,
+} from "./features/dashboard/analytics";
+import type {
+  AttendanceEntry,
+  AuthenticatedUser,
+  CashFlowSummary,
+  GeneratedTeam,
+  MatchPlayerRatingInput,
+  MatchPlayerRatingState,
+  MatchSummary,
+  PlayerRatings,
+  PlayerSummary,
+  TransactionRecord,
+} from "./domain/types";
+import type {
+  PersonalAttendanceSnapshot,
+  PersonalFinanceSnapshot,
+  RecentTeamSnapshot,
+  UpcomingMatchSnapshot,
+} from "./features/profile/contracts";
+import type { SignupFormValues } from "./features/auth/contracts";
+import type { GuestFormValues, MatchFormValues } from "./features/pre-match/contracts";
+import type {
+  AccessAccountFormValues,
+  AccessAccountSummary,
+  PlayerFilterState,
+  PlayerFormValues,
+} from "./features/roster/contracts";
+import {
+  AUTH_TOKEN_KEY,
+  changePassword,
+  createMatch as createMatchRequest,
+  createAttendanceForPlayer,
+  createGuestAttendance,
+  createPlayer as createPlayerRequest,
+  createTransaction as createTransactionRequest,
+  deleteAttendance as deleteAttendanceRequest,
+  patchMatchStatus as patchMatchStatusRequest,
+  patchMatchResult as patchMatchResultRequest,
+  generateTeams,
+  getCurrentMatch,
+  getFinancialSummary,
+  getMatchPlayerRatings,
+  getMe,
+  getPaymentRanking,
+  getPortalOverview,
+  getPresenceRanking,
+  getSeasonOverview,
+  listAttendance,
+  listMatches,
+  listPlayers,
+  listTransactions,
+  listUserAccounts,
+  login,
+  logout,
+  mapGeneratedTeams,
+  patchPlayerStatus,
+  resetUserAccountPassword,
+  registerAccount,
+  createUserAccount as createUserAccountRequest,
+  submitMatchPlayerRatings,
+  updateMatch as updateMatchRequest,
+  updateTransaction as updateTransactionRequest,
+  updatePlayer as updatePlayerRequest,
+  updateUserAccount as updateUserAccountRequest,
+  voidTransaction as voidTransactionRequest,
+} from "./lib/api";
+
+type NavigationIcon = "finance" | "roster" | "accounts" | "match" | "portal";
+
+type NavigationItem = {
+  label: string;
+  path: string;
+  icon: NavigationIcon;
+};
+
+const adminNavigation: NavigationItem[] = [
+  { label: "Dashboard", path: "/dashboard", icon: "finance" },
+  { label: "Elenco", path: "/roster", icon: "roster" },
+  { label: "Contas", path: "/accounts", icon: "accounts" },
+  { label: "Pré-Jogo", path: "/pre-match", icon: "match" },
+];
+
+const commonNavigation: NavigationItem[] = [
+  { label: "Extrato", path: "/portal", icon: "finance" },
+  { label: "Elenco", path: "/roster", icon: "roster" },
+  { label: "Peladas", path: "/pre-match", icon: "match" },
+];
+
+const emptyCashFlow: CashFlowSummary = {
+  currentBalance: 0,
+  inflowTotal: 0,
+  outflowTotal: 0,
+  pendingTotal: 0,
+};
+
+const defaultRatings: PlayerRatings = {
+  overall: 70,
+};
+
+const defaultRosterFilters: PlayerFilterState = {
+  search: "",
+  position: "ALL",
+  status: "ACTIVE",
+};
+
+const currentReferenceMonth = () => new Date().toISOString().slice(0, 7);
+
+const matchStatusLabels: Record<MatchSummary["status"], string> = {
+  DRAFT: "Pelada em rascunho",
+  OPEN: "Pelada aberta",
+  CLOSED: "Pelada fechada",
+  ARCHIVED: "Pelada arquivada",
+};
+
+const roleLabels = {
+  ADMIN: "Administrador",
+  COMMON: "Jogador",
+} as const;
+
+function SidebarNavIcon({ icon }: { icon: NavigationIcon }) {
+  switch (icon) {
+    case "finance":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="5.5" width="17" height="13" rx="2.6" />
+          <path d="M3.5 9.2h17" />
+          <circle cx="12" cy="12.4" r="2.35" />
+          <path d="M7 12.4h.01M17 12.4h.01" />
+        </svg>
+      );
+    case "roster":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="9" cy="9" r="2.6" />
+          <path d="M4.8 18c.5-2.35 2.6-4 5.2-4 2.58 0 4.68 1.65 5.18 4" />
+          <path d="M16.6 14.1c1.6.36 2.82 1.66 3.14 3.26" />
+          <path d="M15.8 6.9a2.15 2.15 0 1 1 0 4.3" />
+        </svg>
+      );
+    case "accounts":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="6" width="17" height="12" rx="2.4" />
+          <circle cx="9" cy="11" r="2.1" />
+          <path d="M6.1 15.6c.8-1.55 5-1.55 5.8 0" />
+          <path d="M14.5 10.2h3.6M14.5 12.7h3.6M14.5 15.2h2.4" />
+        </svg>
+      );
+    case "portal":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="8.3" r="2.9" />
+          <path d="M6.1 18.2c.8-2.7 3.14-4.5 5.9-4.5 2.74 0 5.06 1.8 5.86 4.5" />
+        </svg>
+      );
+    case "match":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="5.5" width="17" height="13" rx="2.1" />
+          <path d="M12 5.5v13" />
+          <circle cx="12" cy="12" r="2.25" />
+          <path d="M3.5 9.2h2.8v5.6H3.5M20.5 9.2h-2.8v5.6h2.8" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+const emptyPortalFinance: PersonalFinanceSnapshot = {
+  monthlyFeeAmount: 0,
+  paidInReferenceMonth: 0,
+  pendingInReferenceMonth: 0,
+  outstandingBalance: 0,
+  referenceMonth: currentReferenceMonth(),
+};
+
+function deriveGeneratedTeams(entries: AttendanceEntry[]) {
+  const teamsByNumber = new Map<number, GeneratedTeam>();
+
+  entries
+    .filter((entry) => entry.assignedTeamNumber != null)
+    .forEach((entry) => {
+      const teamNumber = entry.assignedTeamNumber as number;
+      const existing = teamsByNumber.get(teamNumber);
+
+      if (existing) {
+        existing.players.push(entry);
+        existing.totalOverall += entry.ratings.overall;
+        existing.averageOverall = existing.totalOverall / existing.players.length;
+        return;
+      }
+
+      teamsByNumber.set(teamNumber, {
+        name: entry.assignedTeamName || `Time ${teamNumber}`,
+        players: [entry],
+        totalOverall: entry.ratings.overall,
+        averageOverall: entry.ratings.overall,
+      });
+    });
+
+  return Array.from(teamsByNumber.entries())
+    .sort((left, right) => left[0] - right[0])
+    .map(([, team]) => team);
+}
+
+function calculateAverageOverallGap(teams: GeneratedTeam[]) {
+  if (teams.length < 2) {
+    return null;
+  }
+
+  const averages = teams.map((team) => team.averageOverall);
+  return Math.max(...averages) - Math.min(...averages);
+}
+
+function buildPortalRecentTeams(
+  recentAttendance: PersonalAttendanceSnapshot[],
+  matches: MatchSummary[],
+): RecentTeamSnapshot[] {
+  const matchesById = new Map(matches.map((match) => [match.id, match]));
+
+  return recentAttendance
+    .filter((item) => item.assignedTeamName || item.assignedTeamNumber)
+    .map((item) => {
+      const match = matchesById.get(item.matchId);
+      return {
+        matchId: item.matchId,
+        scheduledAt: item.scheduledAt,
+        teamName: item.assignedTeamName || `Time ${item.assignedTeamNumber}`,
+        teammates: [],
+        averageOverall: null,
+        resultSummary: match?.resultSummary ?? null,
+      };
+    });
+}
+
+type ToastTone = "success" | "error" | "warning";
+
+type AppToast = {
+  id: number;
+  tone: ToastTone;
+  message: string;
+};
+
+export default function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isLoginRoute = location.pathname === "/login";
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(Boolean(token));
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+  const [isCreatingPublicAccount, setIsCreatingPublicAccount] = useState(false);
+  const [loginError, setLoginError] = useState<string>();
+  const [signupError, setSignupError] = useState<string>();
+  const [screenError, setScreenError] = useState<string>();
+  const [toasts, setToasts] = useState<AppToast[]>([]);
+  const [summary, setSummary] = useState<CashFlowSummary>(emptyCashFlow);
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [players, setPlayers] = useState<PlayerSummary[]>([]);
+  const [accounts, setAccounts] = useState<AccessAccountSummary[]>([]);
+  const [seasonOverview, setSeasonOverview] = useState<DashboardSeasonOverviewSnapshot | null>(null);
+  const [presenceRanking, setPresenceRanking] = useState<DashboardPresenceRankingEntry[]>([]);
+  const [paymentRanking, setPaymentRanking] = useState<DashboardPaymentRankingEntry[]>([]);
+  const [portalLinkedPlayer, setPortalLinkedPlayer] = useState<PlayerSummary | null>(null);
+  const [portalFinance, setPortalFinance] = useState<PersonalFinanceSnapshot>(emptyPortalFinance);
+  const [portalRecentAttendance, setPortalRecentAttendance] = useState<PersonalAttendanceSnapshot[]>([]);
+  const [portalUpcomingMatches, setPortalUpcomingMatches] = useState<UpcomingMatchSnapshot[]>([]);
+  const [matches, setMatches] = useState<MatchSummary[]>([]);
+  const [currentMatch, setCurrentMatch] = useState<MatchSummary | null>(null);
+  const [attendance, setAttendance] = useState<AttendanceEntry[]>([]);
+  const [generatedTeams, setGeneratedTeams] = useState<GeneratedTeam[]>([]);
+  const [averageOverallGap, setAverageOverallGap] = useState<number | null>(null);
+  const [matchRatingState, setMatchRatingState] = useState<MatchPlayerRatingState | null>(null);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [isRosterLoading, setIsRosterLoading] = useState(false);
+  const [isPreMatchLoading, setIsPreMatchLoading] = useState(false);
+  const [isPortalLoading, setIsPortalLoading] = useState(false);
+  const [isGeneratingTeams, setIsGeneratingTeams] = useState(false);
+  const [isSubmittingMatch, setIsSubmittingMatch] = useState(false);
+  const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
+  const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
+  const [isSubmittingRoster, setIsSubmittingRoster] = useState(false);
+  const [isSubmittingAccount, setIsSubmittingAccount] = useState(false);
+  const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
+  const [rosterFilters, setRosterFilters] = useState<PlayerFilterState>(defaultRosterFilters);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<string>();
+  const [currentPasswordValue, setCurrentPasswordValue] = useState("");
+  const [newPasswordValue, setNewPasswordValue] = useState("");
+  const [confirmPasswordValue, setConfirmPasswordValue] = useState("");
+
+  const fetchFinancialData = async (authToken: string) =>
+    Promise.all([
+      getFinancialSummary(authToken),
+      listTransactions(authToken),
+    ]);
+
+  const fetchPortalData = async (authToken: string) => getPortalOverview(authToken);
+
+  const fetchAdminData = async (authToken: string) => {
+    const referenceMonth = currentReferenceMonth();
+    const [userAccounts, overview, presence, payment] = await Promise.all([
+      listUserAccounts(authToken),
+      getSeasonOverview(authToken),
+      getPresenceRanking(authToken, 8),
+      getPaymentRanking(authToken, referenceMonth, 8),
+    ]);
+
+    return {
+      userAccounts,
+      overview,
+      presence,
+      paymentRanking: payment.ranking,
+    };
+  };
+
+  const fetchMatchData = async (authToken: string, preferredMatchId?: string | null) => {
+    const [openMatch, allMatches] = await Promise.all([
+      getCurrentMatch(authToken),
+      listMatches(authToken),
+    ]);
+
+    const nextMatch =
+      (preferredMatchId ? allMatches.find((entry) => entry.id === preferredMatchId) : null) ??
+      (currentMatch ? allMatches.find((entry) => entry.id === currentMatch.id) : null) ??
+      (openMatch ? allMatches.find((entry) => entry.id === openMatch.id) ?? openMatch : null) ??
+      allMatches[0] ??
+      null;
+
+    return {
+      matches: allMatches,
+      selectedMatch: nextMatch,
+    };
+  };
+
+  const dismissToast = (toastId: number) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== toastId));
+  };
+
+  const pushToast = (tone: ToastTone, message: string) => {
+    const toastId = Date.now() + Math.floor(Math.random() * 1000);
+    setToasts((prev) => [...prev, { id: toastId, tone, message }]);
+    window.setTimeout(() => {
+      dismissToast(toastId);
+    }, 4200);
+  };
+
+  const reportSuccess = (message: string) => {
+    setScreenError(undefined);
+    pushToast("success", message);
+  };
+
+  const reportError = (fallbackMessage: string, error: unknown) => {
+    const message = error instanceof Error ? error.message : fallbackMessage;
+    setScreenError(message);
+    pushToast("error", message);
+    return message;
+  };
+
+  const applyAdminData = (adminData: Awaited<ReturnType<typeof fetchAdminData>> | null) => {
+    if (!adminData) {
+      setAccounts([]);
+      setSeasonOverview(null);
+      setPresenceRanking([]);
+      setPaymentRanking([]);
+      return;
+    }
+
+    setAccounts(adminData.userAccounts);
+    setSeasonOverview(adminData.overview);
+    setPresenceRanking(adminData.presence);
+    setPaymentRanking(adminData.paymentRanking);
+  };
+
+  useEffect(() => {
+    if (!token) {
+      setCurrentUser(null);
+      setAccounts([]);
+      setSeasonOverview(null);
+      setPresenceRanking([]);
+      setPaymentRanking([]);
+      setPortalLinkedPlayer(null);
+      setPortalFinance(emptyPortalFinance);
+      setPortalRecentAttendance([]);
+      setPortalUpcomingMatches([]);
+      setIsPasswordModalOpen(false);
+      setIsAuthLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        const user = await getMe(token);
+        if (!isCancelled) {
+          setCurrentUser(user);
+          setLoginError(undefined);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          setToken(null);
+          setCurrentUser(null);
+          setLoginError("Sua sessão expirou. Entre novamente.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsAuthLoading(false);
+        }
+      }
+    };
+
+    void restoreSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!currentUser || !token) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadData = async () => {
+      setScreenError(undefined);
+      setIsDashboardLoading(true);
+      setIsRosterLoading(true);
+      setIsPreMatchLoading(true);
+      setIsPortalLoading(currentUser.role === "COMMON");
+
+      try {
+        const adminPromise =
+          currentUser.role === "ADMIN" ? fetchAdminData(token) : Promise.resolve(null);
+        const portalPromise =
+          currentUser.role === "COMMON" ? fetchPortalData(token) : Promise.resolve(null);
+
+        const financePromise =
+          currentUser.role === "ADMIN"
+            ? fetchFinancialData(token)
+            : Promise.all([Promise.resolve(emptyCashFlow), listTransactions(token)] as const);
+
+        const [[financialSummary, ledger], squad, matchData, portalData, adminData] = await Promise.all([
+          financePromise,
+          listPlayers(token),
+          fetchMatchData(token),
+          portalPromise,
+          adminPromise,
+        ]);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setSummary(financialSummary);
+        setTransactions(ledger);
+        setPlayers(squad);
+        const visibleMatches =
+          currentUser.role === "COMMON"
+            ? matchData.matches.filter((entry) => entry.status !== "DRAFT")
+            : matchData.matches;
+        const visibleCurrentMatch =
+          currentUser.role === "COMMON"
+            ? visibleMatches.find((entry) => entry.id === matchData.selectedMatch?.id) ?? visibleMatches[0] ?? null
+            : matchData.selectedMatch;
+
+        setMatches(visibleMatches);
+        setCurrentMatch(visibleCurrentMatch);
+        if (portalData) {
+          setPortalLinkedPlayer(portalData.linkedPlayer);
+          setPortalFinance(portalData.finance);
+          setPortalRecentAttendance(portalData.recentAttendance);
+          setPortalUpcomingMatches(portalData.upcomingMatches);
+        } else {
+          setPortalLinkedPlayer(null);
+          setPortalFinance(emptyPortalFinance);
+          setPortalRecentAttendance([]);
+          setPortalUpcomingMatches([]);
+        }
+        applyAdminData(adminData);
+      } catch (error) {
+        if (!isCancelled) {
+          setScreenError(error instanceof Error ? error.message : "Nao foi possível sincronizar os dados.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsDashboardLoading(false);
+          setIsRosterLoading(false);
+          setIsPreMatchLoading(false);
+          setIsPortalLoading(false);
+        }
+      }
+    };
+
+    void loadData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser, token]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setIsPasswordModalOpen(false);
+      setPasswordChangeError(undefined);
+      setCurrentPasswordValue("");
+      setNewPasswordValue("");
+      setConfirmPasswordValue("");
+      return;
+    }
+
+    if (currentUser.mustChangePassword) {
+      setIsPasswordModalOpen(true);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!token || !currentMatch) {
+      setAttendance([]);
+      setGeneratedTeams([]);
+      setAverageOverallGap(null);
+      setMatchRatingState(null);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadAttendance = async () => {
+      setIsPreMatchLoading(true);
+      setScreenError(undefined);
+
+      try {
+        const [entries, ratingState] = await Promise.all([
+          listAttendance(token, currentMatch.id),
+          getMatchPlayerRatings(token, currentMatch.id).catch(() => null),
+        ]);
+        if (!isCancelled) {
+          const derivedTeams = deriveGeneratedTeams(entries);
+          setAttendance(entries);
+          setGeneratedTeams(derivedTeams);
+          setAverageOverallGap(calculateAverageOverallGap(derivedTeams));
+          setMatchRatingState(ratingState);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setScreenError(error instanceof Error ? error.message : "Falha ao carregar a presença da pelada.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsPreMatchLoading(false);
+        }
+      }
+    };
+
+    void loadAttendance();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentMatch, token]);
+
+  const handleLogin = async (identifier: string, password: string) => {
+    setIsSubmittingLogin(true);
+    setLoginError(undefined);
+    setSignupError(undefined);
+
+    try {
+      const session = await login(identifier, password);
+      localStorage.setItem(AUTH_TOKEN_KEY, session.token);
+      setToken(session.token);
+      setCurrentUser(session.user);
+      navigate(session.user.role === "COMMON" ? "/portal" : "/dashboard", { replace: true });
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Falha ao autenticar.");
+    } finally {
+      setIsSubmittingLogin(false);
+    }
+  };
+
+  const handlePublicSignup = async (values: SignupFormValues) => {
+    setIsCreatingPublicAccount(true);
+    setLoginError(undefined);
+    setSignupError(undefined);
+
+    try {
+      const session = await registerAccount(values);
+      localStorage.setItem(AUTH_TOKEN_KEY, session.token);
+      setToken(session.token);
+      setCurrentUser(session.user);
+      navigate("/portal", { replace: true });
+    } catch (error) {
+      setSignupError(error instanceof Error ? error.message : "Falha ao criar conta.");
+      throw error;
+    } finally {
+      setIsCreatingPublicAccount(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (token) {
+      try {
+        await logout(token);
+      } catch {
+        // Ignore logout failures and clear the local session anyway.
+      }
+    }
+
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    setToken(null);
+    setCurrentUser(null);
+    setAccounts([]);
+    setSeasonOverview(null);
+    setPresenceRanking([]);
+    setPaymentRanking([]);
+    setPortalLinkedPlayer(null);
+    setPortalFinance(emptyPortalFinance);
+    setPortalRecentAttendance([]);
+    setPortalUpcomingMatches([]);
+    setIsPasswordModalOpen(false);
+    setPasswordChangeError(undefined);
+    setCurrentPasswordValue("");
+    setNewPasswordValue("");
+    setConfirmPasswordValue("");
+    setMatches([]);
+    setCurrentMatch(null);
+    setAttendance([]);
+    setGeneratedTeams([]);
+    setAverageOverallGap(null);
+    setMatchRatingState(null);
+    navigate("/login", { replace: true });
+  };
+
+  const handleGenerateTeams = async (teamCount: number) => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsGeneratingTeams(true);
+    setScreenError(undefined);
+
+    try {
+      const result = await generateTeams(token, currentMatch.id, teamCount);
+      const refreshedAttendance = await listAttendance(token, currentMatch.id);
+      setAttendance(refreshedAttendance);
+      const mapped = mapGeneratedTeams(result, refreshedAttendance);
+      setGeneratedTeams(mapped.teams);
+      setAverageOverallGap(mapped.averageOverallGap);
+      reportSuccess("Times equilibrados gerados com sucesso.");
+    } catch (error) {
+      reportError("Falha ao gerar times.", error);
+    } finally {
+      setIsGeneratingTeams(false);
+    }
+  };
+
+  const handleSubmitPlayerRatings = async (ratings: MatchPlayerRatingInput[]) => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsSubmittingRatings(true);
+    setScreenError(undefined);
+
+    try {
+      const nextRatingState = await submitMatchPlayerRatings(token, currentMatch.id, ratings);
+      const [nextPlayers, nextAttendance] = await Promise.all([
+        listPlayers(token),
+        listAttendance(token, currentMatch.id),
+      ]);
+      setMatchRatingState(nextRatingState);
+      setPlayers(nextPlayers);
+      setAttendance(nextAttendance);
+      reportSuccess("Notas enviadas. Overalls atualizados no elenco.");
+    } catch (error) {
+      reportError("Falha ao enviar notas.", error);
+      throw error;
+    } finally {
+      setIsSubmittingRatings(false);
+    }
+  };
+
+  const handleSelectMatch = (matchId: string) => {
+    const selectedMatch = matches.find((entry) => entry.id === matchId) ?? null;
+    setCurrentMatch(selectedMatch);
+  };
+
+  const handleCreateMatch = async (values: MatchFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingMatch(true);
+    setScreenError(undefined);
+
+    try {
+      const createdMatch = await createMatchRequest(token, values);
+      const [matchData] = await Promise.all([
+        fetchMatchData(token, createdMatch.id),
+        refreshAdminDataState(token),
+      ]);
+      setMatches(matchData.matches);
+      setCurrentMatch(matchData.selectedMatch);
+      reportSuccess("Pelada criada com sucesso.");
+    } catch (error) {
+      reportError("Falha ao criar a pelada.", error);
+      throw error;
+    } finally {
+      setIsSubmittingMatch(false);
+    }
+  };
+
+  const handleEditMatch = async (matchId: string, values: MatchFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingMatch(true);
+    setScreenError(undefined);
+
+    try {
+      await updateMatchRequest(token, matchId, values);
+      const [matchData] = await Promise.all([
+        fetchMatchData(token, matchId),
+        refreshAdminDataState(token),
+      ]);
+      setMatches(matchData.matches);
+      setCurrentMatch(matchData.selectedMatch);
+      reportSuccess("Pelada atualizada com sucesso.");
+    } catch (error) {
+      reportError("Falha ao atualizar a pelada.", error);
+      throw error;
+    } finally {
+      setIsSubmittingMatch(false);
+    }
+  };
+
+  const handleUpdateMatchStatus = async (matchId: string, nextStatus: MatchSummary["status"]) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingMatch(true);
+    setScreenError(undefined);
+
+    try {
+      await patchMatchStatusRequest(token, matchId, nextStatus);
+      const [matchData] = await Promise.all([
+        fetchMatchData(token, matchId),
+        refreshAdminDataState(token),
+      ]);
+      setMatches(matchData.matches);
+      setCurrentMatch(matchData.selectedMatch);
+      reportSuccess("Status da pelada atualizado.");
+    } catch (error) {
+      reportError("Falha ao atualizar o status da pelada.", error);
+      throw error;
+    } finally {
+      setIsSubmittingMatch(false);
+    }
+  };
+
+  const handleUpdateMatchResult = async (matchId: string, resultSummary: string) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingMatch(true);
+    setScreenError(undefined);
+
+    try {
+      await patchMatchResultRequest(token, matchId, resultSummary);
+      const matchData = await fetchMatchData(token, matchId);
+      setMatches(matchData.matches);
+      setCurrentMatch(matchData.selectedMatch);
+      reportSuccess("Resultado da pelada registrado.");
+    } catch (error) {
+      reportError("Falha ao registrar o resultado da pelada.", error);
+      throw error;
+    } finally {
+      setIsSubmittingMatch(false);
+    }
+  };
+
+  const handleCreateTransaction = async (values: TransactionFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingTransaction(true);
+    setScreenError(undefined);
+
+    try {
+      await createTransactionRequest(token, values);
+      const [[financialSummary, ledger]] = await Promise.all([
+        fetchFinancialData(token),
+        refreshAdminDataState(token),
+      ]);
+      setSummary(financialSummary);
+      setTransactions(ledger);
+      reportSuccess("Movimentação lançada no caixa.");
+    } catch (error) {
+      reportError("Falha ao lançar movimento.", error);
+      throw error;
+    } finally {
+      setIsSubmittingTransaction(false);
+    }
+  };
+
+  const handleEditTransaction = async (transactionId: string, values: TransactionFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingTransaction(true);
+    setScreenError(undefined);
+
+    try {
+      await updateTransactionRequest(token, transactionId, values);
+      const [[financialSummary, ledger]] = await Promise.all([
+        fetchFinancialData(token),
+        refreshAdminDataState(token),
+      ]);
+      setSummary(financialSummary);
+      setTransactions(ledger);
+      reportSuccess("Lançamento atualizado com sucesso.");
+    } catch (error) {
+      reportError("Falha ao atualizar lançamento.", error);
+      throw error;
+    } finally {
+      setIsSubmittingTransaction(false);
+    }
+  };
+
+  const handleVoidTransaction = async (transactionId: string) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingTransaction(true);
+    setScreenError(undefined);
+
+    try {
+      await voidTransactionRequest(token, transactionId);
+      const [[financialSummary, ledger]] = await Promise.all([
+        fetchFinancialData(token),
+        refreshAdminDataState(token),
+      ]);
+      setSummary(financialSummary);
+      setTransactions(ledger);
+      reportSuccess("Lançamento estornado com sucesso.");
+    } catch (error) {
+      reportError("Falha ao estornar lançamento.", error);
+      throw error;
+    } finally {
+      setIsSubmittingTransaction(false);
+    }
+  };
+
+  const handleCreatePlayer = async (values: PlayerFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingRoster(true);
+    setScreenError(undefined);
+
+    try {
+      const created = await createPlayerRequest(token, values);
+      setPlayers((prev) => [...prev, created].sort((left, right) => left.fullName.localeCompare(right.fullName)));
+      await refreshAdminDataState(token);
+      reportSuccess("Jogador criado com sucesso.");
+    } catch (error) {
+      reportError("Falha ao criar jogador.", error);
+      throw error;
+    } finally {
+      setIsSubmittingRoster(false);
+    }
+  };
+
+  const handleEditPlayer = async (playerId: string, values: PlayerFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingRoster(true);
+    setScreenError(undefined);
+
+    try {
+      const updated = await updatePlayerRequest(token, playerId, values);
+      setPlayers((prev) =>
+        prev
+          .map((player) => (player.id === playerId ? updated : player))
+          .sort((left, right) => left.fullName.localeCompare(right.fullName)),
+      );
+      await refreshAdminDataState(token);
+      reportSuccess("Jogador atualizado com sucesso.");
+    } catch (error) {
+      reportError("Falha ao atualizar jogador.", error);
+      throw error;
+    } finally {
+      setIsSubmittingRoster(false);
+    }
+  };
+
+  const handleTogglePlayerStatus = async (playerId: string, nextActive: boolean) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingRoster(true);
+    setScreenError(undefined);
+
+    try {
+      const updated = await patchPlayerStatus(token, playerId, nextActive);
+      setPlayers((prev) => prev.map((player) => (player.id === playerId ? updated : player)));
+      await refreshAdminDataState(token);
+      reportSuccess(nextActive ? "Jogador reativado." : "Jogador inativado.");
+    } catch (error) {
+      reportError("Falha ao atualizar status do jogador.", error);
+      throw error;
+    } finally {
+      setIsSubmittingRoster(false);
+    }
+  };
+
+  const handleCreateAccount = async (values: AccessAccountFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingAccount(true);
+    setScreenError(undefined);
+
+    try {
+      await createUserAccountRequest(token, values);
+      const nextAccounts = await listUserAccounts(token);
+      setAccounts(nextAccounts);
+      reportSuccess("Conta de acesso criada com sucesso.");
+    } catch (error) {
+      reportError("Falha ao criar conta.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAccount(false);
+    }
+  };
+
+  const handleEditAccount = async (accountId: string, values: AccessAccountFormValues) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingAccount(true);
+    setScreenError(undefined);
+
+    try {
+      const updated = await updateUserAccountRequest(token, accountId, values);
+      setAccounts((prev) => prev.map((account) => (account.id === accountId ? updated : account)));
+
+      if (currentUser?.id === accountId) {
+        setCurrentUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                displayName: updated.displayName,
+                email: updated.email,
+                role: updated.role,
+                linkedPlayerId: updated.linkedPlayerId,
+                mustChangePassword: updated.mustChangePassword,
+              }
+            : prev,
+        );
+      }
+      reportSuccess("Conta atualizada com sucesso.");
+    } catch (error) {
+      reportError("Falha ao atualizar conta.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAccount(false);
+    }
+  };
+
+  const handleResetAccountPassword = async (accountId: string, newPassword: string) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingAccount(true);
+    setScreenError(undefined);
+
+    try {
+      const updated = await resetUserAccountPassword(token, accountId, newPassword);
+      setAccounts((prev) => prev.map((account) => (account.id === accountId ? updated : account)));
+
+      if (currentUser?.id === accountId) {
+        setCurrentUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                mustChangePassword: true,
+              }
+            : prev,
+        );
+      }
+      reportSuccess("Senha temporária redefinida para a conta.");
+    } catch (error) {
+      reportError("Falha ao resetar a senha da conta.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAccount(false);
+    }
+  };
+
+  const resetGeneratedTeams = () => {
+    setGeneratedTeams([]);
+    setAverageOverallGap(null);
+  };
+
+  const handleConfirmPlayer = async (playerId: string) => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    const player = players.find((entry) => entry.id === playerId);
+    if (!player) {
+      return;
+    }
+
+    setIsSubmittingAttendance(true);
+    setScreenError(undefined);
+
+    try {
+      const created = await createAttendanceForPlayer(token, currentMatch.id, player);
+      setAttendance((prev) =>
+        [...prev, created].sort((left, right) => left.displayName.localeCompare(right.displayName)),
+      );
+      await refreshAdminDataState(token);
+      resetGeneratedTeams();
+      reportSuccess("Presença confirmada na pelada.");
+    } catch (error) {
+      reportError("Falha ao confirmar presença.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAttendance(false);
+    }
+  };
+
+  const handleAddGuest = async (values: GuestFormValues) => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsSubmittingAttendance(true);
+    setScreenError(undefined);
+
+    try {
+      const created = await createGuestAttendance(token, currentMatch.id, values);
+      setAttendance((prev) =>
+        [...prev, created].sort((left, right) => left.displayName.localeCompare(right.displayName)),
+      );
+      await refreshAdminDataState(token);
+      resetGeneratedTeams();
+      reportSuccess("Convidado adicionado com sucesso.");
+    } catch (error) {
+      reportError("Falha ao adicionar convidado.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAttendance(false);
+    }
+  };
+
+  const handleRemoveAttendance = async (attendanceId: string) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingAttendance(true);
+    setScreenError(undefined);
+
+    try {
+      await deleteAttendanceRequest(token, attendanceId);
+      setAttendance((prev) => prev.filter((entry) => entry.id !== attendanceId));
+      await refreshAdminDataState(token);
+      resetGeneratedTeams();
+      reportSuccess("Entrada removida da lista de presença.");
+    } catch (error) {
+      reportError("Falha ao remover presença.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAttendance(false);
+    }
+  };
+
+  const refreshAdminDataState = async (authToken: string) => {
+    if (!isAdmin) {
+      return;
+    }
+
+    const adminData = await fetchAdminData(authToken);
+    applyAdminData(adminData);
+  };
+
+  const handleRefreshPortal = async () => {
+    if (!token || !isCommonUser) {
+      return;
+    }
+
+    setIsPortalLoading(true);
+    setScreenError(undefined);
+
+    try {
+      const [portalData, matchData, personalLedger, squad] = await Promise.all([
+        fetchPortalData(token),
+        fetchMatchData(token),
+        listTransactions(token),
+        listPlayers(token),
+      ]);
+      const visibleMatches = matchData.matches.filter((entry) => entry.status !== "DRAFT");
+      setPortalLinkedPlayer(portalData.linkedPlayer);
+      setPortalFinance(portalData.finance);
+      setPortalRecentAttendance(portalData.recentAttendance);
+      setPortalUpcomingMatches(portalData.upcomingMatches);
+      setTransactions(personalLedger);
+      setPlayers(squad);
+      setMatches(visibleMatches);
+      setCurrentMatch(
+        visibleMatches.find((entry) => entry.id === matchData.selectedMatch?.id) ?? visibleMatches[0] ?? null,
+      );
+      reportSuccess("Portal atualizado com sucesso.");
+    } catch (error) {
+      reportError("Falha ao atualizar seu portal.", error);
+    } finally {
+      setIsPortalLoading(false);
+    }
+  };
+
+  const closePasswordModal = () => {
+    if (currentUser?.mustChangePassword) {
+      return;
+    }
+
+    setIsPasswordModalOpen(false);
+    setPasswordChangeError(undefined);
+    setCurrentPasswordValue("");
+    setNewPasswordValue("");
+    setConfirmPasswordValue("");
+  };
+
+  const handlePasswordChange = async () => {
+    if (!token) {
+      return;
+    }
+
+    if (!currentPasswordValue || !newPasswordValue) {
+      setPasswordChangeError("Preencha a senha atual e a nova senha.");
+      return;
+    }
+
+    if (newPasswordValue !== confirmPasswordValue) {
+      setPasswordChangeError("A confirmacao da senha precisa ser igual a nova senha.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    setPasswordChangeError(undefined);
+
+    try {
+      const session = await changePassword(token, currentPasswordValue, newPasswordValue);
+      localStorage.setItem(AUTH_TOKEN_KEY, session.token);
+      setToken(session.token);
+      setCurrentUser(session.user);
+      setIsPasswordModalOpen(false);
+      setCurrentPasswordValue("");
+      setNewPasswordValue("");
+      setConfirmPasswordValue("");
+      reportSuccess("Senha atualizada com sucesso.");
+    } catch (error) {
+      setPasswordChangeError(error instanceof Error ? error.message : "Falha ao trocar a senha.");
+      pushToast("error", error instanceof Error ? error.message : "Falha ao trocar a senha.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const filteredPlayers = players.filter((player) => {
+    if (rosterFilters.status === "ACTIVE" && !player.isActive) {
+      return false;
+    }
+    if (rosterFilters.status === "INACTIVE" && player.isActive) {
+      return false;
+    }
+    if (rosterFilters.position !== "ALL" && player.preferredPosition !== rosterFilters.position) {
+      return false;
+    }
+    if (rosterFilters.search.trim()) {
+      const term = rosterFilters.search.trim().toLowerCase();
+      return (
+        player.fullName.toLowerCase().includes(term) ||
+        (player.nickname ?? "").toLowerCase().includes(term)
+      );
+    }
+    return true;
+  });
+
+  const isAdmin = currentUser?.role === "ADMIN";
+  const isCommonUser = currentUser?.role === "COMMON";
+  const navigation = isCommonUser ? commonNavigation : adminNavigation;
+  const portalRecentTeams = buildPortalRecentTeams(portalRecentAttendance, matches);
+  const currentNavItem = navigation.find((item) => location.pathname.startsWith(item.path)) ?? navigation[0];
+  const currentUserName = currentUser?.displayName || currentUser?.username || "Jogador";
+  const attendancePlayerIds = new Set(attendance.map((entry) => entry.playerId).filter(Boolean));
+  const availablePlayers = players.filter(
+    (player) => player.isActive && player.playerType === "MEMBER" && !attendancePlayerIds.has(player.id),
+  );
+
+  const renderProtected = (element: JSX.Element) => {
+    if (isAuthLoading) {
+      return <section className="empty-state">Restaurando sessão...</section>;
+    }
+    if (!currentUser) {
+      return <Navigate to="/login" replace />;
+    }
+    return element;
+  };
+
+  return (
+    <div className={`app-shell ${isLoginRoute ? "login-route" : ""}`}>
+      {toasts.length > 0 ? (
+        <div className="toast-stack" aria-live="polite" aria-atomic="true">
+          {toasts.map((toast) => (
+            <div key={toast.id} className={`toast-card ${toast.tone}`}>
+              <div>
+                <strong>{toast.tone === "success" ? "Sucesso" : toast.tone === "warning" ? "Aviso" : "Erro"}</strong>
+                <p>{toast.message}</p>
+              </div>
+              <button type="button" className="toast-close" onClick={() => dismissToast(toast.id)}>
+                Fechar
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {!isLoginRoute && currentUser && (
+        <aside className="side-nav">
+          <div className="brand">
+            <div className="brand-mark">
+              <img src={sofradoresLogo} alt="Sofredores 027" className="brand-logo" />
+            </div>
+            <div className="brand-copy">
+              <p>Peladinhas Sofredores</p>
+            </div>
+          </div>
+          <div className="side-user-card">
+            <div className="side-user-copy">
+              <strong>{currentUserName}</strong>
+              <small>@{currentUser.username}</small>
+            </div>
+            <span className={`side-role-badge ${currentUser.role === "ADMIN" ? "admin" : "common"}`}>
+              {roleLabels[currentUser.role]}
+            </span>
+          </div>
+          <nav className="nav-list">
+            {navigation.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
+              >
+                <span className="nav-link-icon">
+                  <SidebarNavIcon icon={item.icon} />
+                </span>
+                <span className="nav-link-copy">
+                  <span className="nav-label">{item.label}</span>
+                </span>
+              </NavLink>
+            ))}
+          </nav>
+          <div className="nav-footer">
+            <div className="nav-context-card">
+              <p className="eyebrow">Pelada da vez</p>
+              <strong>
+                {currentMatch
+                  ? new Date(currentMatch.scheduledAt).toLocaleString("pt-BR", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })
+                  : "Nenhuma pelada selecionada"}
+              </strong>
+              <div className="nav-context-meta">
+                <small>{currentMatch?.location || "Defina em Pré-Jogo"}</small>
+                {currentMatch ? (
+                  <span className={`status-chip ${currentMatch.status.toLowerCase()}`}>
+                    {matchStatusLabels[currentMatch.status]}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <button type="button" className="ghost-button" onClick={handleLogout}>
+              Encerrar sessão
+            </button>
+          </div>
+        </aside>
+      )}
+      <main className="main-area">
+        {!isLoginRoute && currentUser && (
+          <header className="top-bar">
+            <div className="top-bar-copy">
+              <p className="eyebrow">{isAdmin ? "Central de comando" : "Portal do jogador"}</p>
+              <strong className="top-bar-title">{currentNavItem?.label ?? "Peladinhas Sofredores"}</strong>
+            </div>
+            <div className="top-bar-pill">
+              <span>Bem-vindo, {currentUserName}</span>
+              <span className="dot" />
+            </div>
+            <div className="top-bar-actions">
+              <span className="top-meta-chip">
+                {currentMatch ? matchStatusLabels[currentMatch.status] : "Sem pelada ativa"}
+              </span>
+              <span className={`top-meta-chip ${isAdmin ? "accent" : ""}`}>
+                {roleLabels[currentUser.role]}
+              </span>
+              <button
+                type="button"
+                className={currentUser.mustChangePassword ? "primary-button" : "ghost-button"}
+                onClick={() => setIsPasswordModalOpen(true)}
+              >
+                {currentUser.mustChangePassword ? "Trocar senha agora" : "Trocar senha"}
+              </button>
+            </div>
+          </header>
+        )}
+        {screenError ? <div className="status-banner error">{screenError}</div> : null}
+        {currentUser?.mustChangePassword && !isLoginRoute ? (
+          <div className="status-banner warning">
+            Sua conta esta com senha temporaria. Troque a senha antes de continuar usando a aplicacao.
+          </div>
+        ) : null}
+        <Routes>
+          <Route
+            path="/login"
+            element={currentUser ? <Navigate to={isCommonUser ? "/portal" : "/dashboard"} replace /> : (
+              <LoginPage
+                isSubmitting={isSubmittingLogin}
+                isCreatingAccount={isCreatingPublicAccount}
+                errorMessage={loginError}
+                signupErrorMessage={signupError}
+                canCreateAccount
+                onSubmit={(values) => {
+                  void handleLogin(values.identifier, values.password);
+                }}
+                onCreateAccount={(values) => handlePublicSignup(values)}
+              />
+            )}
+          />
+          <Route
+            path="/portal"
+            element={renderProtected(
+              isCommonUser ? (
+                <CommonUserPortalPage
+                  currentUser={currentUser as AuthenticatedUser}
+                  linkedPlayer={portalLinkedPlayer}
+                  finance={portalFinance}
+                  transactions={transactions}
+                  players={players}
+                  matches={matches.filter((match) => match.status !== "DRAFT")}
+                  recentAttendance={portalRecentAttendance}
+                  upcomingMatches={portalUpcomingMatches}
+                  recentTeams={portalRecentTeams}
+                  isLoading={isPortalLoading}
+                  onRefresh={() => handleRefreshPortal()}
+                />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              ),
+            )}
+          />
+          <Route
+            path="/dashboard"
+            element={renderProtected(
+              isAdmin ? (
+                <DashboardPage
+                  summary={summary}
+                  transactions={transactions}
+                  players={players}
+                  seasonOverview={seasonOverview}
+                  presenceRanking={presenceRanking}
+                  paymentRanking={paymentRanking}
+                  isLoading={isDashboardLoading}
+                  isSubmittingTransaction={isSubmittingTransaction}
+                  canManageCash={isAdmin}
+                  onAddTransaction={(values) => handleCreateTransaction(values)}
+                  onEditTransaction={(transactionId, values) => handleEditTransaction(transactionId, values)}
+                  onVoidTransaction={(transactionId) => handleVoidTransaction(transactionId)}
+                  onOpenLedger={() => null}
+                />
+              ) : (
+                <Navigate to="/portal" replace />
+              )
+            )}
+          />
+          <Route
+            path="/roster"
+            element={renderProtected(
+              isAdmin ? (
+                <RosterPage
+                  players={filteredPlayers}
+                  allPlayers={players}
+                  accounts={accounts}
+                  filters={rosterFilters}
+                  isLoading={isRosterLoading}
+                  isSubmitting={isSubmittingRoster}
+                  isSubmittingAccount={isSubmittingAccount}
+                  canEdit={isAdmin}
+                  onFilterChange={setRosterFilters}
+                  onCreatePlayer={(values) => handleCreatePlayer(values)}
+                  onEditPlayer={(playerId, values) => handleEditPlayer(playerId, values)}
+                  onCreateAccount={(values) => handleCreateAccount(values)}
+                  onEditAccount={(accountId, values) => handleEditAccount(accountId, values)}
+                  onResetAccountPassword={(accountId, newPassword) =>
+                    handleResetAccountPassword(accountId, newPassword)
+                  }
+                  onTogglePlayerStatus={(playerId, nextActive) =>
+                    handleTogglePlayerStatus(playerId, nextActive)
+                  }
+                />
+              ) : (
+                <RosterPage
+                  players={filteredPlayers}
+                  allPlayers={players}
+                  filters={rosterFilters}
+                  isLoading={isRosterLoading}
+                  isSubmitting={false}
+                  canEdit={false}
+                  onFilterChange={setRosterFilters}
+                  onCreatePlayer={async () => undefined}
+                  onEditPlayer={async () => undefined}
+                  onTogglePlayerStatus={async () => undefined}
+                />
+              )
+            )}
+          />
+          <Route
+            path="/accounts"
+            element={renderProtected(
+              isAdmin ? (
+                <AccountsPage
+                  accounts={accounts}
+                  players={players}
+                  isLoading={isRosterLoading}
+                  isSubmitting={isSubmittingAccount}
+                  canEdit={isAdmin}
+                  onCreateAccount={(values) => handleCreateAccount(values)}
+                  onEditAccount={(accountId, values) => handleEditAccount(accountId, values)}
+                  onResetAccountPassword={(accountId, newPassword) =>
+                    handleResetAccountPassword(accountId, newPassword)
+                  }
+                />
+              ) : (
+                <Navigate to="/portal" replace />
+              )
+            )}
+          />
+          <Route
+            path="/pre-match"
+            element={renderProtected(
+              <PreMatchPage
+                matches={matches}
+                match={currentMatch}
+                attendance={attendance}
+                availablePlayers={availablePlayers}
+                generatedTeams={generatedTeams}
+                averageOverallGap={averageOverallGap}
+                isLoading={isPreMatchLoading}
+                isGeneratingTeams={isGeneratingTeams}
+                isSubmittingRatings={isSubmittingRatings}
+                isSubmittingMatch={isSubmittingMatch}
+                isSubmittingAttendance={isSubmittingAttendance}
+                canManageAttendance={isAdmin}
+                canManageMatch={isAdmin}
+                onSelectMatch={(matchId) => handleSelectMatch(matchId)}
+                onCreateMatch={(values) => handleCreateMatch(values)}
+                onEditMatch={(matchId, values) => handleEditMatch(matchId, values)}
+                onUpdateMatchStatus={(matchId, nextStatus) =>
+                  handleUpdateMatchStatus(matchId, nextStatus)
+                }
+                onUpdateMatchResult={(matchId, resultSummary) =>
+                  handleUpdateMatchResult(matchId, resultSummary)
+                }
+                onConfirmPlayer={(playerId) => handleConfirmPlayer(playerId)}
+                onAddGuest={(values) => handleAddGuest(values)}
+                onRemoveAttendance={(attendanceId) => handleRemoveAttendance(attendanceId)}
+                onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
+                ratingState={matchRatingState}
+                onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
+              />
+            )}
+          />
+          <Route
+            path="/"
+            element={<Navigate to={currentUser ? (isCommonUser ? "/portal" : "/dashboard") : "/login"} replace />}
+          />
+          <Route
+            path="*"
+            element={<Navigate to={currentUser ? (isCommonUser ? "/portal" : "/dashboard") : "/login"} replace />}
+          />
+        </Routes>
+        {isPasswordModalOpen ? (
+          <div className="modal-backdrop">
+            <div className="modal-card glass-card" style={{ width: "min(520px, 100%)" }}>
+              <div className="ledger-heading">
+                <div>
+                  <p className="eyebrow">Seguranca</p>
+                  <h3>Atualizar senha</h3>
+                </div>
+                {!currentUser?.mustChangePassword ? (
+                  <button type="button" className="ghost-button" onClick={closePasswordModal}>
+                    Fechar
+                  </button>
+                ) : null}
+              </div>
+              <div className="form-grid compact-grid">
+                <label className="form-span-2">
+                  Senha atual
+                  <input
+                    className="input-field"
+                    type="password"
+                    value={currentPasswordValue}
+                    onChange={(event) => setCurrentPasswordValue(event.target.value)}
+                    autoFocus
+                  />
+                </label>
+                <label className="form-span-2">
+                  Nova senha
+                  <input
+                    className="input-field"
+                    type="password"
+                    value={newPasswordValue}
+                    onChange={(event) => setNewPasswordValue(event.target.value)}
+                  />
+                </label>
+                <label className="form-span-2">
+                  Confirmar nova senha
+                  <input
+                    className="input-field"
+                    type="password"
+                    value={confirmPasswordValue}
+                    onChange={(event) => setConfirmPasswordValue(event.target.value)}
+                  />
+                </label>
+                {passwordChangeError ? <p className="error-text form-span-2">{passwordChangeError}</p> : null}
+                <div className="section-actions form-span-2">
+                  {!currentUser?.mustChangePassword ? (
+                    <button type="button" className="ghost-button" onClick={closePasswordModal}>
+                      Cancelar
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={isChangingPassword}
+                    onClick={() => void handlePasswordChange()}
+                  >
+                    {isChangingPassword ? "Salvando..." : "Atualizar senha"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </main>
+    </div>
+  );
+}
