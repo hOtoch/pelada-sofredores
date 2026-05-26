@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -40,6 +40,9 @@ from .serializers import (
     UserAccountSerializer,
     UserSerializer,
 )
+
+GUEST_FEE_AMOUNT = Decimal("14.00")
+FINAL_MATCH_STATUSES = [Match.Status.CLOSED, Match.Status.ARCHIVED]
 
 
 def month_bounds(reference_date: date) -> tuple[date, date]:
@@ -112,8 +115,31 @@ def build_player_payment_map(player_ids: list, month_start: date, month_end: dat
     }
 
 
+def guest_fee_due_queryset():
+    return MatchAttendance.objects.filter(
+        is_guest=True,
+        attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+        guest_fee_status=MatchAttendance.GuestFeeStatus.PENDING,
+        guest_fee_amount__gt=Decimal("0.00"),
+        match__status__in=FINAL_MATCH_STATUSES,
+    )
+
+
+def get_guest_fee_pending_total():
+    return guest_fee_due_queryset().aggregate(
+        total=Coalesce(
+            Sum("guest_fee_amount"),
+            Decimal("0.00"),
+            output_field=DecimalField(max_digits=12, decimal_places=2),
+        )
+    )["total"]
+
+
 def clamp_overall(value: int) -> int:
     return max(0, min(99, value))
+
+
+RATING_WINDOW_DURATION = timedelta(hours=24)
 
 
 def recalculate_player_overall_from_match_ratings(player: Player) -> None:
@@ -129,6 +155,61 @@ def recalculate_player_overall_from_match_ratings(player: Player) -> None:
     ).quantize(Decimal("1"))
     player.overall = clamp_overall(int(next_overall))
     player.save(update_fields=["overall", "updated_at"])
+
+
+def get_rating_window_started_at(match: Match):
+    if match.status != Match.Status.ARCHIVED:
+        return None
+    return match.archived_at or match.updated_at
+
+
+def get_rating_window_closes_at(match: Match):
+    started_at = get_rating_window_started_at(match)
+    if started_at is None:
+        return None
+    return started_at + RATING_WINDOW_DURATION
+
+
+def is_rating_window_expired(match: Match) -> bool:
+    window_closes_at = get_rating_window_closes_at(match)
+    return bool(window_closes_at and timezone.now() >= window_closes_at)
+
+
+def finalize_match_ratings_if_due(match: Match) -> bool:
+    if match.status != Match.Status.ARCHIVED or match.ratings_finalized_at or not is_rating_window_expired(match):
+        return False
+
+    with transaction.atomic():
+        locked_match = Match.objects.select_for_update().get(pk=match.pk)
+        if (
+            locked_match.status != Match.Status.ARCHIVED
+            or locked_match.ratings_finalized_at
+            or not is_rating_window_expired(locked_match)
+        ):
+            match.ratings_finalized_at = locked_match.ratings_finalized_at
+            return False
+
+        rated_player_ids = (
+            MatchPlayerRating.objects.filter(match=locked_match)
+            .values_list("rated_player_id", flat=True)
+            .distinct()
+        )
+        for player in Player.objects.filter(id__in=rated_player_ids):
+            recalculate_player_overall_from_match_ratings(player)
+
+        locked_match.ratings_finalized_at = timezone.now()
+        locked_match.save(update_fields=["ratings_finalized_at", "updated_at"])
+        match.ratings_finalized_at = locked_match.ratings_finalized_at
+        return True
+
+
+def finalize_due_match_ratings() -> None:
+    due_matches = Match.objects.filter(
+        status=Match.Status.ARCHIVED,
+        ratings_finalized_at__isnull=True,
+    )
+    for match in due_matches:
+        finalize_match_ratings_if_due(match)
 
 
 class IsRoleAdmin(BasePermission):
@@ -167,6 +248,7 @@ class PlayerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
 
     def get_queryset(self):
+        finalize_due_match_ratings()
         queryset = super().get_queryset()
         if getattr(self.request.user, "role", None) == Role.ADMIN:
             return queryset
@@ -184,6 +266,7 @@ class MatchViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def get_queryset(self):
+        finalize_due_match_ratings()
         queryset = super().get_queryset()
         if getattr(self.request.user, "role", None) == Role.ADMIN:
             return queryset
@@ -201,11 +284,18 @@ class MatchViewSet(viewsets.ModelViewSet):
 
         extra_fields = {}
         if "status" in validated_data:
+            archived_at = None
+            if status_value == Match.Status.ARCHIVED:
+                archived_at = serializer.instance.archived_at or timezone.now()
+
             extra_fields["attendance_locked_at"] = (
                 timezone.now()
                 if status_value in [Match.Status.CLOSED, Match.Status.ARCHIVED]
                 else None
             )
+            extra_fields["archived_at"] = archived_at
+            if status_value != Match.Status.ARCHIVED:
+                extra_fields["ratings_finalized_at"] = None
 
         if "result_summary" in validated_data:
             extra_fields["result_recorded_at"] = timezone.now() if result_summary else None
@@ -293,14 +383,33 @@ class MatchViewSet(viewsets.ModelViewSet):
         return Response(response_serializer.data)
 
     def _get_rating_lock_reason(self, match):
-        if match.status not in [Match.Status.CLOSED, Match.Status.ARCHIVED]:
-            return "Avaliações liberadas após o encerramento da pelada."
+        if match.status != Match.Status.ARCHIVED:
+            return "Avaliações liberadas após o arquivamento da pelada."
+
+        if is_rating_window_expired(match):
+            return "A janela de notas desta pelada foi encerrada."
 
         return ""
 
     def _build_rating_state(self, match):
+        finalize_match_ratings_if_due(match)
         locked_reason = self._get_rating_lock_reason(match)
         can_rate = bool(getattr(self.request.user, "role", None) != Role.ADMIN and not locked_reason)
+        window_closes_at = get_rating_window_closes_at(match)
+        is_window_closed = match.status == Match.Status.ARCHIVED and is_rating_window_expired(match)
+
+        if is_window_closed:
+            payload = {
+                "match_id": match.id,
+                "can_rate": False,
+                "has_submitted": False,
+                "locked_reason": locked_reason,
+                "window_closes_at": window_closes_at,
+                "ratings_finalized_at": match.ratings_finalized_at,
+                "items": [],
+                "log": [],
+            }
+            return MatchPlayerRatingStateSerializer(payload).data
 
         participants_queryset = match.attendance_entries.select_related("player").filter(
             attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
@@ -322,6 +431,35 @@ class MatchViewSet(viewsets.ModelViewSet):
             .values("rated_attendance_id")
             .annotate(average_score=Avg("score"), rating_count=Count("id"))
         }
+
+        rating_log = []
+        for rating in (
+            MatchPlayerRating.objects.filter(match=match)
+            .select_related("rater_user", "rater", "rated_attendance", "rated_player")
+            .order_by("-created_at")
+        ):
+            rater_display_name = ""
+            if rating.rater_user_id:
+                rater_display_name = (
+                    rating.rater_user.display_name
+                    or rating.rater_user.get_full_name()
+                    or rating.rater_user.username
+                )
+            elif rating.rater_id:
+                rater_display_name = rating.rater.full_name
+
+            rating_log.append(
+                {
+                    "rater_user_id": rating.rater_user_id,
+                    "rater_display_name": rater_display_name or "Usuário sem nome",
+                    "rated_attendance_id": rating.rated_attendance_id,
+                    "rated_player_id": rating.rated_player_id,
+                    "rated_display_name": rating.rated_attendance.display_name,
+                    "score": rating.score,
+                    "created_at": rating.created_at,
+                    "updated_at": rating.updated_at,
+                }
+            )
 
         items = []
         for entry in participants:
@@ -348,7 +486,10 @@ class MatchViewSet(viewsets.ModelViewSet):
             "can_rate": can_rate,
             "has_submitted": bool(rating_by_attendance),
             "locked_reason": locked_reason,
+            "window_closes_at": window_closes_at,
+            "ratings_finalized_at": match.ratings_finalized_at,
             "items": items,
+            "log": rating_log,
         }
         return MatchPlayerRatingStateSerializer(payload).data
 
@@ -377,7 +518,6 @@ class MatchViewSet(viewsets.ModelViewSet):
             allowed_entries_queryset = allowed_entries_queryset.exclude(player=linked_player)
 
         allowed_entries = {entry.id: entry for entry in allowed_entries_queryset}
-        changed_players = {}
         with transaction.atomic():
             for item in serializer.validated_data["ratings"]:
                 attendance_id = item["attendance_id"]
@@ -396,10 +536,6 @@ class MatchViewSet(viewsets.ModelViewSet):
                         "score": item["score"],
                     },
                 )
-                changed_players[attendance_entry.player_id] = attendance_entry.player
-
-            for player in changed_players.values():
-                recalculate_player_overall_from_match_ratings(player)
 
         return Response(self._build_rating_state(match))
 
@@ -460,6 +596,15 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
         if player:
             validated_data.setdefault("overall", player.overall)
 
+        is_guest = validated_data.get("is_guest", instance.is_guest if instance else False)
+        if is_guest:
+            validated_data.setdefault("guest_fee_amount", GUEST_FEE_AMOUNT)
+            validated_data.setdefault("guest_fee_status", MatchAttendance.GuestFeeStatus.PENDING)
+        else:
+            validated_data["guest_fee_amount"] = Decimal("0.00")
+            validated_data["guest_fee_status"] = MatchAttendance.GuestFeeStatus.WAIVED
+            validated_data["guest_fee_paid_at"] = None
+
         if "attendance_status" in validated_data or instance is None:
             validated_data["confirmed_at"] = (
                 timezone.now()
@@ -478,6 +623,40 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
                 instance=serializer.instance,
             )
         )
+
+    @action(detail=True, methods=["post"], url_path="mark-guest-fee-paid")
+    def mark_guest_fee_paid(self, request, pk=None):
+        attendance = self.get_object()
+        if not attendance.is_guest:
+            raise ValidationError({"detail": "Apenas convidados possuem taxa avulsa."})
+        if attendance.attendance_status != MatchAttendance.AttendanceStatus.CONFIRMED:
+            raise ValidationError({"detail": "A taxa só é cobrada de convidados confirmados."})
+        if attendance.match.status not in FINAL_MATCH_STATUSES:
+            raise ValidationError({"detail": "A taxa do convidado só é finalizada ao fim da pelada."})
+        if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.PAID:
+            return Response(self.get_serializer(attendance).data)
+
+        with transaction.atomic():
+            attendance = MatchAttendance.objects.select_for_update().select_related("match").get(pk=attendance.pk)
+            if attendance.guest_fee_status != MatchAttendance.GuestFeeStatus.PAID:
+                Transaction.objects.create(
+                    direction=Transaction.Direction.INFLOW,
+                    category=Transaction.Category.EXTRA_FEE,
+                    status=Transaction.Status.POSTED,
+                    amount=attendance.guest_fee_amount,
+                    description=f"Taxa de convidado - {attendance.display_name}",
+                    occurred_on=timezone.localdate(),
+                    reference_month=timezone.localdate().replace(day=1),
+                    match=attendance.match,
+                    recorded_by=request.user,
+                    external_reference=f"guest-fee:{attendance.id}",
+                    notes=f"Taxa avulsa do convidado {attendance.display_name}.",
+                )
+                attendance.guest_fee_status = MatchAttendance.GuestFeeStatus.PAID
+                attendance.guest_fee_paid_at = timezone.now()
+                attendance.save(update_fields=["guest_fee_status", "guest_fee_paid_at", "updated_at"])
+
+        return Response(self.get_serializer(attendance).data)
 
 
 class AuthLoginView(APIView):
@@ -576,6 +755,7 @@ class FinancialSummaryView(APIView):
                 Decimal("0.00"),
             ),
         )
+        totals["pending_total"] += get_guest_fee_pending_total()
         payload = {
             "current_balance": totals["inflow_total"] - totals["outflow_total"],
             **totals,
@@ -772,6 +952,7 @@ class SeasonOverviewView(APIView):
                 Decimal("0.00"),
             ),
         )
+        finance_totals["pending_total"] += get_guest_fee_pending_total()
 
         active_members = list(
             Player.objects.filter(

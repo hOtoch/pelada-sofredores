@@ -119,9 +119,11 @@ class Match(TimestampedModel):
         on_delete=models.SET_NULL,
     )
     attendance_locked_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
     teams_generated_at = models.DateTimeField(null=True, blank=True)
     result_summary = models.TextField(blank=True)
     result_recorded_at = models.DateTimeField(null=True, blank=True)
+    ratings_finalized_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -207,6 +209,11 @@ class MatchAttendance(TimestampedModel, RatingSnapshotMixin):
         PENDING = "PENDING", "Pendente"
         DECLINED = "DECLINED", "Nao vai"
 
+    class GuestFeeStatus(models.TextChoices):
+        PENDING = "PENDING", "Pendente"
+        PAID = "PAID", "Pago"
+        WAIVED = "WAIVED", "Dispensado"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     match = models.ForeignKey(
         Match,
@@ -237,6 +244,13 @@ class MatchAttendance(TimestampedModel, RatingSnapshotMixin):
     assigned_team_number = models.PositiveSmallIntegerField(null=True, blank=True)
     assigned_team_name = models.CharField(max_length=32, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
+    guest_fee_amount = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+    guest_fee_status = models.CharField(
+        max_length=16,
+        choices=GuestFeeStatus.choices,
+        default=GuestFeeStatus.WAIVED,
+    )
+    guest_fee_paid_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
     class Meta:

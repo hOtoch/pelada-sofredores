@@ -414,9 +414,10 @@ class ApiFlowTests(APITestCase):
         self.assertIn(str(closed_match.id), [item["id"] for item in matches_response.data])
         self.assertTrue(all(item["status"] != Match.Status.DRAFT for item in matches_response.data))
 
-    def test_common_user_can_rate_finished_match_without_linked_player_and_update_overall(self) -> None:
-        self.match.status = Match.Status.CLOSED
-        self.match.save(update_fields=["status"])
+    def test_common_user_can_rate_archived_match_without_linked_player_and_keep_overall_pending(self) -> None:
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
         target_attendance = MatchAttendance.objects.get(match=self.match, player=self.players[1])
         original_overall = self.players[1].overall
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
@@ -433,14 +434,19 @@ class ApiFlowTests(APITestCase):
         self.assertIn(str(self.players[0].id), [item["player_id"] for item in state_response.data["items"]])
         self.assertEqual(submit_response.status_code, 200)
         self.assertTrue(submit_response.data["has_submitted"])
+        self.assertEqual(submit_response.data["log"][0]["rater_user_id"], str(self.common_user.id))
+        self.assertEqual(submit_response.data["log"][0]["rater_display_name"], self.common_user.display_name)
+        self.assertEqual(submit_response.data["log"][0]["rated_display_name"], target_attendance.display_name)
+        self.assertEqual(submit_response.data["log"][0]["score"], 10)
         self.assertEqual(MatchPlayerRating.objects.filter(match=self.match, rater_user=self.common_user).count(), 1)
         self.players[1].refresh_from_db()
-        self.assertGreater(self.players[1].overall, original_overall)
+        self.assertEqual(self.players[1].overall, original_overall)
 
     def test_common_user_can_rate_finished_match_without_participation(self) -> None:
         other_match = Match.objects.create(
             scheduled_at=timezone.now() - timedelta(days=1),
-            status=Match.Status.CLOSED,
+            status=Match.Status.ARCHIVED,
+            archived_at=timezone.now(),
             expected_team_count=2,
             created_by=self.user,
         )
@@ -462,6 +468,31 @@ class ApiFlowTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(MatchPlayerRating.objects.filter(match=other_match, rater_user=self.common_user).count(), 1)
+
+    def test_rating_window_finalizes_overall_and_returns_empty_state_after_24_hours(self) -> None:
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now() - timedelta(hours=25)
+        self.match.save(update_fields=["status", "archived_at"])
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=self.players[1])
+        original_overall = self.players[1].overall
+        MatchPlayerRating.objects.create(
+            match=self.match,
+            rater_user=self.common_user,
+            rated_attendance=target_attendance,
+            rated_player=self.players[1],
+            score=10,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        response = self.client.get(f"/api/matches/{self.match.id}/player-ratings/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["can_rate"])
+        self.assertEqual(response.data["items"], [])
+        self.assertEqual(response.data["log"], [])
+        self.assertIsNotNone(response.data["ratings_finalized_at"])
+        self.players[1].refresh_from_db()
+        self.assertGreater(self.players[1].overall, original_overall)
 
     def test_admin_can_create_transaction_via_api(self) -> None:
         response = self.client.post(

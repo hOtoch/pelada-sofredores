@@ -49,6 +49,7 @@ export interface GeneratedTeamsBoardProps {
 export interface PreMatchPageProps {
   matches: MatchSummary[];
   match: MatchSummary | null;
+  activeSection?: "match" | "ratings";
   attendance: AttendanceEntry[];
   availablePlayers: PlayerSummary[];
   generatedTeams: GeneratedTeam[];
@@ -68,6 +69,7 @@ export interface PreMatchPageProps {
   onConfirmPlayer: (playerId: string) => Promise<void> | void;
   onAddGuest: (values: GuestFormValues) => Promise<void> | void;
   onRemoveAttendance: (attendanceId: string) => Promise<void> | void;
+  onMarkGuestFeePaid: (attendanceId: string) => Promise<void> | void;
   onGenerateTeams: (teamCount: number) => Promise<void> | void;
   ratingState?: MatchPlayerRatingState | null;
   onSubmitPlayerRatings?: (ratings: MatchPlayerRatingInput[]) => Promise<void> | void;

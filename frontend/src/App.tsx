@@ -68,6 +68,7 @@ import {
   login,
   logout,
   mapGeneratedTeams,
+  markGuestFeePaid as markGuestFeePaidRequest,
   patchPlayerStatus,
   resetUserAccountPassword,
   registerAccount,
@@ -80,7 +81,7 @@ import {
   voidTransaction as voidTransactionRequest,
 } from "./lib/api";
 
-type NavigationIcon = "finance" | "roster" | "accounts" | "match" | "portal";
+type NavigationIcon = "finance" | "roster" | "accounts" | "match" | "ratings" | "portal";
 
 type NavigationItem = {
   label: string;
@@ -93,12 +94,14 @@ const adminNavigation: NavigationItem[] = [
   { label: "Elenco", path: "/roster", icon: "roster" },
   { label: "Contas", path: "/accounts", icon: "accounts" },
   { label: "Pré-Jogo", path: "/pre-match", icon: "match" },
+  { label: "Notas", path: "/ratings", icon: "ratings" },
 ];
 
 const commonNavigation: NavigationItem[] = [
   { label: "Extrato", path: "/portal", icon: "finance" },
   { label: "Elenco", path: "/roster", icon: "roster" },
   { label: "Peladas", path: "/pre-match", icon: "match" },
+  { label: "Notas", path: "/ratings", icon: "ratings" },
 ];
 
 const emptyCashFlow: CashFlowSummary = {
@@ -175,6 +178,13 @@ function SidebarNavIcon({ icon }: { icon: NavigationIcon }) {
           <path d="M12 5.5v13" />
           <circle cx="12" cy="12" r="2.25" />
           <path d="M3.5 9.2h2.8v5.6H3.5M20.5 9.2h-2.8v5.6h2.8" />
+        </svg>
+      );
+    case "ratings":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3.8l2.35 4.76 5.25.76-3.8 3.7.9 5.22L12 15.78l-4.7 2.46.9-5.22-3.8-3.7 5.25-.76L12 3.8z" />
+          <path d="M9.2 11.9l1.8 1.8 3.9-4.1" />
         </svg>
       );
     default:
@@ -690,7 +700,7 @@ export default function App() {
       setMatchRatingState(nextRatingState);
       setPlayers(nextPlayers);
       setAttendance(nextAttendance);
-      reportSuccess("Notas enviadas. Overalls atualizados no elenco.");
+      reportSuccess("Notas enviadas. Overalls serão atualizados ao final da janela de 24h.");
     } catch (error) {
       reportError("Falha ao enviar notas.", error);
       throw error;
@@ -764,12 +774,18 @@ export default function App() {
 
     try {
       await patchMatchStatusRequest(token, matchId, nextStatus);
-      const [matchData] = await Promise.all([
+      const [matchData, financialData] = await Promise.all([
         fetchMatchData(token, matchId),
+        isAdmin ? fetchFinancialData(token) : Promise.resolve(null),
         refreshAdminDataState(token),
       ]);
       setMatches(matchData.matches);
       setCurrentMatch(matchData.selectedMatch);
+      if (financialData) {
+        const [cashFlow, ledger] = financialData;
+        setSummary(cashFlow);
+        setTransactions(ledger);
+      }
       reportSuccess("Status da pelada atualizado.");
     } catch (error) {
       reportError("Falha ao atualizar o status da pelada.", error);
@@ -1104,6 +1120,36 @@ export default function App() {
       reportSuccess("Entrada removida da lista de presença.");
     } catch (error) {
       reportError("Falha ao remover presença.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAttendance(false);
+    }
+  };
+
+  const handleMarkGuestFeePaid = async (attendanceId: string) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingAttendance(true);
+    setScreenError(undefined);
+
+    try {
+      const updated = await markGuestFeePaidRequest(token, attendanceId);
+      const [cashFlow, ledger] = isAdmin
+        ? await fetchFinancialData(token)
+        : [summary, transactions] as const;
+      setAttendance((prev) =>
+        prev.map((entry) => (entry.id === attendanceId ? updated : entry)),
+      );
+      if (isAdmin) {
+        setSummary(cashFlow);
+        setTransactions(ledger);
+        await refreshAdminDataState(token);
+      }
+      reportSuccess("Taxa de convidado marcada como paga.");
+    } catch (error) {
+      reportError("Falha ao marcar taxa do convidado como paga.", error);
       throw error;
     } finally {
       setIsSubmittingAttendance(false);
@@ -1485,6 +1531,7 @@ export default function App() {
               <PreMatchPage
                 matches={matches}
                 match={currentMatch}
+                activeSection="match"
                 attendance={attendance}
                 availablePlayers={availablePlayers}
                 generatedTeams={generatedTeams}
@@ -1508,6 +1555,44 @@ export default function App() {
                 onConfirmPlayer={(playerId) => handleConfirmPlayer(playerId)}
                 onAddGuest={(values) => handleAddGuest(values)}
                 onRemoveAttendance={(attendanceId) => handleRemoveAttendance(attendanceId)}
+                onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
+                onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
+                ratingState={matchRatingState}
+                onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
+              />
+            )}
+          />
+          <Route
+            path="/ratings"
+            element={renderProtected(
+              <PreMatchPage
+                matches={matches}
+                match={currentMatch}
+                activeSection="ratings"
+                attendance={attendance}
+                availablePlayers={availablePlayers}
+                generatedTeams={generatedTeams}
+                averageOverallGap={averageOverallGap}
+                isLoading={isPreMatchLoading}
+                isGeneratingTeams={isGeneratingTeams}
+                isSubmittingRatings={isSubmittingRatings}
+                isSubmittingMatch={isSubmittingMatch}
+                isSubmittingAttendance={isSubmittingAttendance}
+                canManageAttendance={isAdmin}
+                canManageMatch={isAdmin}
+                onSelectMatch={(matchId) => handleSelectMatch(matchId)}
+                onCreateMatch={(values) => handleCreateMatch(values)}
+                onEditMatch={(matchId, values) => handleEditMatch(matchId, values)}
+                onUpdateMatchStatus={(matchId, nextStatus) =>
+                  handleUpdateMatchStatus(matchId, nextStatus)
+                }
+                onUpdateMatchResult={(matchId, resultSummary) =>
+                  handleUpdateMatchResult(matchId, resultSummary)
+                }
+                onConfirmPlayer={(playerId) => handleConfirmPlayer(playerId)}
+                onAddGuest={(values) => handleAddGuest(values)}
+                onRemoveAttendance={(attendanceId) => handleRemoveAttendance(attendanceId)}
+                onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 ratingState={matchRatingState}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}

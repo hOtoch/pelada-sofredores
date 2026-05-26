@@ -22,6 +22,7 @@ export type TransactionCategory =
 export type TransactionStatus = "POSTED" | "PENDING" | "VOIDED";
 export type MatchStatus = "DRAFT" | "OPEN" | "CLOSED" | "ARCHIVED";
 export type AttendanceStatus = "CONFIRMED" | "PENDING" | "DECLINED";
+export type GuestFeeStatus = "PENDING" | "PAID" | "WAIVED";
 
 export interface AuthenticatedUser {
   id: string;
@@ -98,9 +99,11 @@ export interface MatchSummary {
   status: MatchStatus;
   expectedTeamCount: number;
   attendanceLockedAt?: ISODateTimeString | null;
+  archivedAt?: ISODateTimeString | null;
   teamsGeneratedAt?: ISODateTimeString | null;
   resultSummary?: string | null;
   resultRecordedAt?: ISODateTimeString | null;
+  ratingsFinalizedAt?: ISODateTimeString | null;
   notes?: string;
 }
 
@@ -115,6 +118,11 @@ export interface AttendanceEntry {
   assignedTeamNumber?: number | null;
   assignedTeamName?: string | null;
   confirmedAt?: ISODateTimeString | null;
+  guestFeeAmount: number;
+  guestFeeStatus: GuestFeeStatus;
+  guestFeePaidAt?: ISODateTimeString | null;
+  guestFeeIsDue: boolean;
+  guestFeeOutstanding: number;
   notes?: string;
   ratings: PlayerRatings;
 }
@@ -154,12 +162,26 @@ export interface MatchPlayerRatingState {
   canRate: boolean;
   hasSubmitted: boolean;
   lockedReason: string;
+  windowClosesAt?: ISODateTimeString | null;
+  ratingsFinalizedAt?: ISODateTimeString | null;
   items: MatchPlayerRatingItem[];
+  log: MatchPlayerRatingLogEntry[];
 }
 
 export interface MatchPlayerRatingInput {
   attendanceId: string;
   score: number;
+}
+
+export interface MatchPlayerRatingLogEntry {
+  raterUserId?: string | null;
+  raterDisplayName: string;
+  ratedAttendanceId: string;
+  ratedPlayerId: string;
+  ratedDisplayName: string;
+  score: number;
+  createdAt: ISODateTimeString;
+  updatedAt: ISODateTimeString;
 }
 
 export interface ApiCollectionResponse<T> {

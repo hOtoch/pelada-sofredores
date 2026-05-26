@@ -59,6 +59,11 @@ const formatDateTime = (value: string) =>
     timeStyle: "short",
   });
 
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
 const escapeCsvCell = (value: string | number | null | undefined) => {
   const normalized = String(value ?? "");
   if (/[",;\n]/.test(normalized)) {
@@ -82,6 +87,7 @@ const downloadTextFile = (filename: string, content: string, mimeType: string) =
 export function PreMatchPage({
   matches,
   match,
+  activeSection = "match",
   attendance,
   availablePlayers,
   generatedTeams,
@@ -101,6 +107,7 @@ export function PreMatchPage({
   onConfirmPlayer,
   onAddGuest,
   onRemoveAttendance,
+  onMarkGuestFeePaid,
   onGenerateTeams,
   ratingState,
   onSubmitPlayerRatings,
@@ -112,11 +119,17 @@ export function PreMatchPage({
   const [matchValues, setMatchValues] = useState<MatchFormValues>(createDefaultMatchForm);
   const [resultSummary, setResultSummary] = useState("");
   const [ratingDraft, setRatingDraft] = useState<Record<string, number>>({});
+  const [ratingCardIndex, setRatingCardIndex] = useState(0);
 
   const confirmedCount = attendance.filter((entry) => entry.attendanceStatus === "CONFIRMED").length;
   const isEditableMatch = Boolean(match && (match.status === "OPEN" || match.status === "DRAFT"));
   const canEditAttendance = canManageAttendance && isEditableMatch;
   const canRunGeneration = canManageMatch && isEditableMatch && confirmedCount >= 2;
+  const ratingItems = ratingState?.items ?? [];
+  const completedRatingCount = ratingItems.filter((item) => Boolean(ratingDraft[item.attendanceId])).length;
+  const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
+  const activeRatingScore = activeRatingItem ? ratingDraft[activeRatingItem.attendanceId] ?? 0 : 0;
+  const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
 
   const matchHistory = useMemo(
     () => [...matches].sort((left, right) => right.scheduledAt.localeCompare(left.scheduledAt)),
@@ -136,6 +149,16 @@ export function PreMatchPage({
     });
     setRatingDraft(nextDraft);
   }, [ratingState]);
+
+  useEffect(() => {
+    setRatingCardIndex(0);
+  }, [ratingState?.matchId]);
+
+  useEffect(() => {
+    if (ratingCardIndex >= ratingItems.length) {
+      setRatingCardIndex(Math.max(ratingItems.length - 1, 0));
+    }
+  }, [ratingCardIndex, ratingItems.length]);
 
   const handleGuestField =
     (field: keyof GuestFormValues) =>
@@ -284,6 +307,14 @@ export function PreMatchPage({
     }
   };
 
+  const handleRatingCardStep = (direction: -1 | 1) => {
+    if (ratingItems.length === 0) {
+      return;
+    }
+
+    setRatingCardIndex((prev) => (prev + direction + ratingItems.length) % ratingItems.length);
+  };
+
   const handleExportRound = (format: "csv" | "json") => {
     if (!match) {
       return;
@@ -406,7 +437,9 @@ export function PreMatchPage({
         </div>
       </header>
 
-      <div className="pre-match-grid">
+      {activeSection === "match" ? (
+        <>
+          <div className="pre-match-grid">
         <div className="glass-card attendance-card">
           <div className="ledger-heading">
             <div>
@@ -570,97 +603,6 @@ export function PreMatchPage({
         </div>
       )}
 
-      {match && ratingState && !canManageMatch && (
-        <div className="rating-arena glass-card">
-          <div className="rating-arena-orbit" />
-          <div className="ledger-heading rating-arena-heading">
-            <div>
-              <p className="eyebrow">Pós-jogo</p>
-              <h3>Notas da rodada</h3>
-              <small className="muted">
-                {ratingState.hasSubmitted
-                  ? "Você já votou. Ajuste as notas se quiser recalibrar o ranking."
-                  : "Avalie os participantes e ajude o overall do elenco a evoluir."}
-              </small>
-            </div>
-            <div className="rating-arena-score">
-              <span>{Object.keys(ratingDraft).length}/{ratingState.items.length}</span>
-              <small>cards completos</small>
-            </div>
-          </div>
-
-          {!ratingState.canRate ? (
-            <p className="empty-state">{ratingState.lockedReason || "Avaliações indisponíveis para esta pelada."}</p>
-          ) : (
-            <>
-              <div className="rating-card-grid">
-                {ratingState.items.map((item, index) => {
-                  const selectedScore = ratingDraft[item.attendanceId] ?? 0;
-                  const power = Math.max(8, selectedScore * 10);
-                  return (
-                    <article
-                      key={item.attendanceId}
-                      className={`rating-player-card ${selectedScore ? "rated" : ""}`}
-                      style={{ animationDelay: `${index * 80}ms` }}
-                    >
-                      <div className="rating-player-card-glow" style={{ opacity: selectedScore ? selectedScore / 14 : 0 }} />
-                      <header>
-                        <div>
-                          <span className="rating-card-kicker">Player card</span>
-                          <h4>{item.displayName}</h4>
-                        </div>
-                        <div className="rating-overall-badge">
-                          <strong>{item.currentOverall}</strong>
-                          <span>OVR</span>
-                        </div>
-                      </header>
-                      <div className="rating-power-track" aria-hidden="true">
-                        <div className="rating-power-fill" style={{ width: `${power}%` }} />
-                      </div>
-                      <div className="rating-score-grid">
-                        {Array.from({ length: 10 }, (_, scoreIndex) => scoreIndex + 1).map((score) => (
-                          <button
-                            key={score}
-                            type="button"
-                            className={`rating-score-button ${selectedScore === score ? "active" : ""}`}
-                            onClick={() =>
-                              setRatingDraft((prev) => ({
-                                ...prev,
-                                [item.attendanceId]: score,
-                              }))
-                            }
-                          >
-                            {score}
-                          </button>
-                        ))}
-                      </div>
-                      <footer>
-                        <span>{item.ratingCount} voto(s)</span>
-                        <strong>{item.averageScore ? `${item.averageScore.toFixed(1)} média` : "Sem média"}</strong>
-                      </footer>
-                    </article>
-                  );
-                })}
-              </div>
-              <div className="rating-submit-row">
-                <button
-                  type="button"
-                  className="primary-button rating-submit-button"
-                  disabled={
-                    isSubmittingRatings ||
-                    ratingState.items.length === 0 ||
-                    ratingState.items.some((item) => !ratingDraft[item.attendanceId])
-                  }
-                  onClick={() => void handleRatingSubmit()}
-                >
-                  {isSubmittingRatings ? "Enviando notas..." : ratingState.hasSubmitted ? "Atualizar notas" : "Enviar notas"}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
       {canEditAttendance && match && (
         <div className="pre-match-grid">
           <div className="glass-card attendance-card">
@@ -736,6 +678,47 @@ export function PreMatchPage({
         </div>
       )}
 
+      {match && guestFeeDebts.length > 0 && (
+        <div className="glass-card attendance-card">
+          <div className="ledger-heading">
+            <div>
+              <h3>Pendências de convidados</h3>
+              <small className="muted">
+                {guestFeeDebts.length} convidado(s) com taxa avulsa pendente
+              </small>
+            </div>
+            <span className="status-chip pending">
+              {currencyFormatter.format(
+                guestFeeDebts.reduce((total, entry) => total + entry.guestFeeOutstanding, 0),
+              )}
+            </span>
+          </div>
+          <div className="guest-fee-list">
+            {guestFeeDebts.map((entry) => (
+              <article key={entry.id} className="guest-fee-row">
+                <div>
+                  <strong>{entry.displayName}</strong>
+                  <p className="muted">Taxa de convidado da rodada</p>
+                </div>
+                <div className="guest-fee-actions">
+                  <strong>{currencyFormatter.format(entry.guestFeeOutstanding)}</strong>
+                  {canManageMatch && (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={isSubmittingAttendance}
+                      onClick={() => void onMarkGuestFeePaid(entry.id)}
+                    >
+                      Marcar pago
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="pre-match-grid">
         <div className="glass-card attendance-card">
           <div className="ledger-heading">
@@ -754,6 +737,16 @@ export function PreMatchPage({
                   <p className="muted">
                     {entry.isGuest ? "Convidado" : "Mensalista"} · {entry.ratings.overall} OVR
                   </p>
+                  {entry.isGuest && (
+                    <p className={`guest-fee-inline ${entry.guestFeeIsDue ? "warning" : entry.guestFeeStatus.toLowerCase()}`}>
+                      Taxa convidado:{" "}
+                      {entry.guestFeeStatus === "PAID"
+                        ? "paga"
+                        : entry.guestFeeIsDue
+                          ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
+                          : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
+                    </p>
+                  )}
                 </div>
                 <div className="attendance-controls">
                   <span className="muted">{attendanceStatusLabels[entry.attendanceStatus]}</span>
@@ -805,6 +798,186 @@ export function PreMatchPage({
           </div>
         </div>
       </div>
+
+        </>
+      ) : (
+        <div className="rating-arena glass-card">
+          <div className="ledger-heading rating-arena-heading">
+            <div>
+              <p className="eyebrow">Pós-jogo</p>
+              <h3>Notas da rodada</h3>
+              <small className="muted">
+                {ratingState?.ratingsFinalizedAt
+                  ? `Finalizadas em ${formatDateTime(ratingState.ratingsFinalizedAt)}`
+                  : ratingState?.windowClosesAt
+                    ? `Janela aberta até ${formatDateTime(ratingState.windowClosesAt)}`
+                    : "A votação abre por 24 horas após o arquivamento da pelada."}
+              </small>
+            </div>
+            <div className="rating-arena-score">
+              <span>
+                {completedRatingCount}/{ratingItems.length}
+              </span>
+              <small>cards completos</small>
+            </div>
+          </div>
+
+          {!match ? (
+            <p className="empty-state">Selecione uma pelada para ver as notas.</p>
+          ) : !ratingState ? (
+            <p className="empty-state">Notas indisponíveis para esta pelada.</p>
+          ) : ratingItems.length === 0 && ratingState.log.length === 0 ? (
+            <p className="empty-state">{ratingState.lockedReason || "A tela de notas está vazia para esta pelada."}</p>
+          ) : (
+            <>
+              {ratingItems.length > 0 && (
+                <div className="rating-carousel-shell">
+                  <button
+                    type="button"
+                    className="rating-carousel-control"
+                    disabled={ratingItems.length < 2}
+                    onClick={() => handleRatingCardStep(-1)}
+                    aria-label="Jogador anterior"
+                  >
+                    ‹
+                  </button>
+
+                  {activeRatingItem && (
+                    <article
+                      className={`rating-player-card rating-carousel-card ${
+                        activeRatingScore ? `rated score-${activeRatingScore}` : ""
+                      }`}
+                    >
+                      <header>
+                        <div>
+                          <span className="rating-card-kicker">Player card</span>
+                          <h4>{activeRatingItem.displayName}</h4>
+                        </div>
+                        <div className="rating-overall-badge">
+                          <strong>{activeRatingItem.currentOverall}</strong>
+                          <span>OVR</span>
+                        </div>
+                      </header>
+                      <div className="rating-impact-panel" aria-live="polite">
+                        <div className="rating-selected-score">
+                          <span>Nota</span>
+                          <strong>{activeRatingScore || "-"}</strong>
+                        </div>
+                        <div className="rating-card-stripes" aria-hidden="true">
+                          {Array.from({ length: 10 }, (_, stripeIndex) => (
+                            <span
+                              key={stripeIndex}
+                              className={stripeIndex < activeRatingScore ? "filled" : ""}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      {ratingState.canRate ? (
+                        <div className="rating-score-grid">
+                          {Array.from({ length: 10 }, (_, scoreIndex) => scoreIndex + 1).map((score) => (
+                            <button
+                              key={score}
+                              type="button"
+                              className={`rating-score-button ${activeRatingScore === score ? "active" : ""}`}
+                              onClick={() =>
+                                setRatingDraft((prev) => ({
+                                  ...prev,
+                                  [activeRatingItem.attendanceId]: score,
+                                }))
+                              }
+                            >
+                              {score}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="empty-state">
+                          {ratingState.lockedReason || "Você pode acompanhar o log, mas não votar nesta rodada."}
+                        </p>
+                      )}
+                      <footer>
+                        <span>{activeRatingItem.ratingCount} voto(s)</span>
+                        <strong>
+                          {activeRatingItem.averageScore ? `${activeRatingItem.averageScore.toFixed(1)} média` : "Sem média"}
+                        </strong>
+                      </footer>
+                    </article>
+                  )}
+
+                  <button
+                    type="button"
+                    className="rating-carousel-control"
+                    disabled={ratingItems.length < 2}
+                    onClick={() => handleRatingCardStep(1)}
+                    aria-label="Próximo jogador"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+
+              {ratingItems.length > 1 && (
+                <div className="rating-carousel-dots" aria-label="Jogadores para avaliar">
+                  {ratingItems.map((item, index) => (
+                    <button
+                      key={item.attendanceId}
+                      type="button"
+                      className={index === ratingCardIndex ? "active" : ""}
+                      onClick={() => setRatingCardIndex(index)}
+                      aria-label={`Ir para ${item.displayName}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {ratingState.canRate && (
+                <div className="rating-submit-row">
+                  <button
+                    type="button"
+                    className="primary-button rating-submit-button"
+                    disabled={
+                      isSubmittingRatings ||
+                      ratingItems.length === 0 ||
+                      ratingItems.some((item) => !ratingDraft[item.attendanceId])
+                    }
+                    onClick={() => void handleRatingSubmit()}
+                  >
+                    {isSubmittingRatings ? "Enviando notas..." : ratingState.hasSubmitted ? "Atualizar notas" : "Enviar notas"}
+                  </button>
+                </div>
+              )}
+
+              <div className="rating-log-panel">
+                <div className="ledger-heading">
+                  <h3>Log de votos</h3>
+                  <span className="muted">{ratingState.log.length} registro(s)</span>
+                </div>
+                {ratingState.log.length === 0 ? (
+                  <p className="empty-state">Nenhum voto registrado ainda.</p>
+                ) : (
+                  <div className="rating-log-list">
+                    {ratingState.log.map((entry) => (
+                      <article
+                        key={`${entry.raterUserId ?? "legacy"}-${entry.ratedAttendanceId}-${entry.updatedAt}`}
+                        className="rating-log-row"
+                      >
+                        <div>
+                          <strong>{entry.raterDisplayName}</strong>
+                          <span className="muted">votou em {entry.ratedDisplayName}</span>
+                        </div>
+                        <div className="rating-log-score">
+                          <strong>{entry.score}</strong>
+                          <span>{formatDateTime(entry.updatedAt)}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {isMatchModalOpen && (
         <div className="modal-backdrop">

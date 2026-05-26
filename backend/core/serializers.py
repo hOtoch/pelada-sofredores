@@ -1,5 +1,6 @@
 """REST serializers aligned with the initial domain model."""
 import re
+from decimal import Decimal
 
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -213,9 +214,11 @@ class MatchSerializer(serializers.ModelSerializer):
             "status",
             "expected_team_count",
             "attendance_locked_at",
+            "archived_at",
             "teams_generated_at",
             "result_summary",
             "result_recorded_at",
+            "ratings_finalized_at",
             "notes",
             "created_by",
             "created_by_name",
@@ -253,6 +256,19 @@ class TransactionSerializer(serializers.ModelSerializer):
 
 class MatchAttendanceSerializer(serializers.ModelSerializer):
     player_name = serializers.CharField(source="player.full_name", read_only=True)
+    guest_fee_is_due = serializers.SerializerMethodField()
+    guest_fee_outstanding = serializers.SerializerMethodField()
+
+    def get_guest_fee_is_due(self, obj):
+        return bool(
+            obj.is_guest
+            and obj.attendance_status == MatchAttendance.AttendanceStatus.CONFIRMED
+            and obj.guest_fee_status == MatchAttendance.GuestFeeStatus.PENDING
+            and obj.match.status in [Match.Status.CLOSED, Match.Status.ARCHIVED]
+        )
+
+    def get_guest_fee_outstanding(self, obj):
+        return obj.guest_fee_amount if self.get_guest_fee_is_due(obj) else Decimal("0.00")
 
     class Meta:
         model = MatchAttendance
@@ -268,6 +284,11 @@ class MatchAttendanceSerializer(serializers.ModelSerializer):
             "assigned_team_number",
             "assigned_team_name",
             "confirmed_at",
+            "guest_fee_amount",
+            "guest_fee_status",
+            "guest_fee_paid_at",
+            "guest_fee_is_due",
+            "guest_fee_outstanding",
             "notes",
             "overall",
             "created_at",
@@ -317,12 +338,26 @@ class MatchPlayerRatingItemSerializer(serializers.Serializer):
     rating_count = serializers.IntegerField()
 
 
+class MatchPlayerRatingLogSerializer(serializers.Serializer):
+    rater_user_id = serializers.UUIDField(allow_null=True)
+    rater_display_name = serializers.CharField()
+    rated_attendance_id = serializers.UUIDField()
+    rated_player_id = serializers.UUIDField()
+    rated_display_name = serializers.CharField()
+    score = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
 class MatchPlayerRatingStateSerializer(serializers.Serializer):
     match_id = serializers.UUIDField()
     can_rate = serializers.BooleanField()
     has_submitted = serializers.BooleanField()
     locked_reason = serializers.CharField(allow_blank=True)
+    window_closes_at = serializers.DateTimeField(allow_null=True)
+    ratings_finalized_at = serializers.DateTimeField(allow_null=True)
     items = MatchPlayerRatingItemSerializer(many=True)
+    log = MatchPlayerRatingLogSerializer(many=True)
 
 
 class MatchPlayerRatingInputItemSerializer(serializers.Serializer):
