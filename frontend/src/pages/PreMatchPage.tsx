@@ -397,6 +397,40 @@ export function PreMatchPage({
     downloadTextFile(`${baseName}.csv`, csvContent, "text/csv;charset=utf-8");
   };
 
+  const handleExportTeamsText = () => {
+    if (!match || generatedTeams.length === 0) {
+      return;
+    }
+
+    const baseName = `times-${match.scheduledAt.slice(0, 10)}`;
+    const totalPlayers = generatedTeams.reduce((total, team) => total + team.players.length, 0);
+    const gapLabel = averageOverallGap != null ? averageOverallGap.toFixed(2) : "0.00";
+    const teamSections = generatedTeams.map((team) =>
+      [
+        `${team.name} (${team.players.length} jogadores)`,
+        `Overall total: ${team.totalOverall} | Media: ${team.averageOverall.toFixed(1)}`,
+        ...team.players.map((player, index) => `${index + 1}. ${player.displayName} - ${player.ratings.overall} OVR`),
+      ].join("\n"),
+    );
+
+    const textContent = [
+      "TIMES DA PELADA",
+      "",
+      `Data: ${formatDateTime(match.scheduledAt)}`,
+      `Local: ${match.location || "A definir"}`,
+      `Participantes: ${totalPlayers}`,
+      `Gap medio: ${gapLabel}`,
+      "",
+      "Escalacoes",
+      "",
+      teamSections.join("\n\n"),
+      "",
+      "Boa pelada!",
+    ].join("\n");
+
+    downloadTextFile(`${baseName}.txt`, textContent, "text/plain;charset=utf-8");
+  };
+
   return (
     <section className="page-section">
       <header className="section-heading">
@@ -775,16 +809,26 @@ export function PreMatchPage({
               <h3>Times sugeridos</h3>
               <span className="muted">Gap médio {averageOverallGap ?? 0}</span>
             </div>
-            {canManageMatch && (
+            <div className="team-board-actions">
               <button
                 type="button"
                 className="ghost-button"
-                disabled={!canClearGeneratedTeams || isGeneratingTeams || isClearingTeams}
-                onClick={() => void onClearGeneratedTeams()}
+                disabled={!match || generatedTeams.length === 0}
+                onClick={handleExportTeamsText}
               >
-                {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
+                Exportar texto
               </button>
-            )}
+              {canManageMatch && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={!canClearGeneratedTeams || isGeneratingTeams || isClearingTeams}
+                  onClick={() => void onClearGeneratedTeams()}
+                >
+                  {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
+                </button>
+              )}
+            </div>
           </div>
           <div className="team-rows">
             {generatedTeams.length === 0 ? (
