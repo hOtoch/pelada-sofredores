@@ -10,8 +10,7 @@ services:
     runtime: python
     plan: free
     buildCommand: "cd backend && ./build.sh"
-    preDeployCommand: "cd backend && python manage.py migrate --noinput"
-    startCommand: "cd backend && python -m gunicorn peladinha.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-2}"
+    startCommand: "cd backend && python manage.py migrate --noinput && python -m gunicorn peladinha.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-2}"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
