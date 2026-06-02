@@ -346,6 +346,10 @@ class MatchViewSet(viewsets.ModelViewSet):
 
         team_payload = []
         with transaction.atomic():
+            match.attendance_entries.update(
+                assigned_team_number=None,
+                assigned_team_name="",
+            )
             for team_index, team in enumerate(result.teams, start=1):
                 for player in team.players:
                     MatchAttendance.objects.filter(id=player.id).update(
@@ -381,6 +385,20 @@ class MatchViewSet(viewsets.ModelViewSet):
         }
         response_serializer = TeamGenerationResponseSerializer(payload)
         return Response(response_serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="clear-teams")
+    def clear_teams(self, request, pk=None):
+        match = self.get_object()
+
+        with transaction.atomic():
+            match.attendance_entries.update(
+                assigned_team_number=None,
+                assigned_team_name="",
+            )
+            match.teams_generated_at = None
+            match.save(update_fields=["teams_generated_at", "updated_at"])
+
+        return Response(self.get_serializer(match).data)
 
     def _get_rating_lock_reason(self, match):
         if match.status != Match.Status.ARCHIVED:

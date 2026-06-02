@@ -56,6 +56,7 @@ export interface PreMatchPageProps {
   averageOverallGap?: number | null;
   isLoading: boolean;
   isGeneratingTeams: boolean;
+  isClearingTeams: boolean;
   isSubmittingRatings: boolean;
   isSubmittingAttendance: boolean;
   isSubmittingMatch: boolean;
@@ -71,6 +72,7 @@ export interface PreMatchPageProps {
   onRemoveAttendance: (attendanceId: string) => Promise<void> | void;
   onMarkGuestFeePaid: (attendanceId: string) => Promise<void> | void;
   onGenerateTeams: (teamCount: number) => Promise<void> | void;
+  onClearGeneratedTeams: () => Promise<void> | void;
   ratingState?: MatchPlayerRatingState | null;
   onSubmitPlayerRatings?: (ratings: MatchPlayerRatingInput[]) => Promise<void> | void;
 }

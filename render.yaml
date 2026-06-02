@@ -1,0 +1,50 @@
+databases:
+  - name: pelada-sofredores-db
+    plan: free
+    databaseName: pelada_sofredores
+    user: pelada_sofredores
+
+services:
+  - type: web
+    name: pelada-sofredores-api
+    runtime: python
+    plan: free
+    buildCommand: "cd backend && ./build.sh"
+    preDeployCommand: "cd backend && python manage.py migrate --noinput"
+    startCommand: "cd backend && python -m gunicorn peladinha.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-2}"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pelada-sofredores-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ".onrender.com,localhost,127.0.0.1"
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: USE_SQLITE
+        value: "false"
+      - key: WEB_CONCURRENCY
+        value: "2"
+
+  - type: web
+    name: pelada-sofredores-web
+    runtime: static
+    buildCommand: "cd frontend && npm ci && npm run build"
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://pelada-sofredores-api.onrender.com/api/*
+      - type: rewrite
+        source: /admin/*
+        destination: https://pelada-sofredores-api.onrender.com/admin/*
+      - type: rewrite
+        source: /static/*
+        destination: https://pelada-sofredores-api.onrender.com/static/*
+      - type: rewrite
+        source: /*
+        destination: /index.html

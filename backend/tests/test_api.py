@@ -164,7 +164,53 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(Decimal(response.data["pending_total"]), Decimal("45.00"))
         self.assertEqual(Decimal(response.data["current_balance"]), Decimal("180.00"))
 
+    def test_guest_fee_is_registered_as_pending_after_match_ends_and_can_be_paid(self) -> None:
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        guest = MatchAttendance.objects.create(
+            match=self.match,
+            display_name="Convidado Devendo",
+            is_guest=True,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            overall=66,
+            guest_fee_amount=Decimal("14.00"),
+            guest_fee_status=MatchAttendance.GuestFeeStatus.PENDING,
+        )
+
+        summary_response = self.client.get("/api/dashboard/financial-summary/")
+        attendance_response = self.client.get(f"/api/attendance/?match={self.match.id}")
+        paid_response = self.client.post(f"/api/attendance/{guest.id}/mark-guest-fee-paid/")
+        next_summary_response = self.client.get("/api/dashboard/financial-summary/")
+
+        self.assertEqual(summary_response.status_code, 200)
+        self.assertEqual(Decimal(summary_response.data["pending_total"]), Decimal("59.00"))
+        guest_payload = next(item for item in attendance_response.data if item["id"] == str(guest.id))
+        self.assertTrue(guest_payload["guest_fee_is_due"])
+        self.assertEqual(Decimal(guest_payload["guest_fee_outstanding"]), Decimal("14.00"))
+        self.assertEqual(paid_response.status_code, 200)
+        self.assertEqual(paid_response.data["guest_fee_status"], MatchAttendance.GuestFeeStatus.PAID)
+        self.assertFalse(paid_response.data["guest_fee_is_due"])
+        self.assertEqual(Decimal(next_summary_response.data["pending_total"]), Decimal("45.00"))
+        self.assertTrue(
+            Transaction.objects.filter(
+                external_reference=f"guest-fee:{guest.id}",
+                amount=Decimal("14.00"),
+                status=Transaction.Status.POSTED,
+            ).exists()
+        )
+
     def test_generate_teams_action_assigns_attendance(self) -> None:
+        stale_attendance = MatchAttendance.objects.create(
+            match=self.match,
+            display_name="Convidado antigo",
+            is_guest=True,
+            attendance_status=MatchAttendance.AttendanceStatus.DECLINED,
+            assigned_team_number=3,
+            assigned_team_name="Time antigo",
+            overall=60,
+        )
+
         response = self.client.post(
             f"/api/matches/{self.match.id}/generate-teams/",
             {"team_count": 2},
@@ -173,10 +219,41 @@ class ApiFlowTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["teams"]), 2)
+        assigned_ids = [
+            player["id"]
+            for team in response.data["teams"]
+            for player in team["players"]
+        ]
+        self.assertEqual(len(assigned_ids), len(set(assigned_ids)))
         self.match.refresh_from_db()
         self.assertIsNotNone(self.match.teams_generated_at)
         self.assertTrue(
             MatchAttendance.objects.filter(match=self.match, assigned_team_number__isnull=False).exists()
+        )
+        stale_attendance.refresh_from_db()
+        self.assertIsNone(stale_attendance.assigned_team_number)
+        self.assertEqual(stale_attendance.assigned_team_name, "")
+
+    def test_clear_teams_action_removes_generated_assignments(self) -> None:
+        self.client.post(
+            f"/api/matches/{self.match.id}/generate-teams/",
+            {"team_count": 2},
+            format="json",
+        )
+        self.match.refresh_from_db()
+        self.assertIsNotNone(self.match.teams_generated_at)
+
+        response = self.client.post(f"/api/matches/{self.match.id}/clear-teams/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["teams_generated_at"])
+        self.match.refresh_from_db()
+        self.assertIsNone(self.match.teams_generated_at)
+        self.assertFalse(
+            MatchAttendance.objects.filter(match=self.match, assigned_team_number__isnull=False).exists()
+        )
+        self.assertFalse(
+            MatchAttendance.objects.filter(match=self.match).exclude(assigned_team_name="").exists()
         )
 
     def test_admin_can_create_match_via_api(self) -> None:

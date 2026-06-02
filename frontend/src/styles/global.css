@@ -414,6 +414,17 @@ button {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.ghost-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ghost-button:disabled:hover {
+  transform: none;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .main-area {
   padding: 0.35rem 0.75rem 1.6rem 0;
 }
@@ -1823,6 +1834,10 @@ button {
 
 .team-board {
   padding: 1.5rem;
+}
+
+.team-board .ledger-heading h3 {
+  margin: 0 0 0.25rem;
 }
 
 .team-rows {

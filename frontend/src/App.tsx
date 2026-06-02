@@ -43,6 +43,7 @@ import type {
 import {
   AUTH_TOKEN_KEY,
   changePassword,
+  clearGeneratedTeams,
   createMatch as createMatchRequest,
   createAttendanceForPlayer,
   createGuestAttendance,
@@ -302,6 +303,7 @@ export default function App() {
   const [isPreMatchLoading, setIsPreMatchLoading] = useState(false);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
   const [isGeneratingTeams, setIsGeneratingTeams] = useState(false);
+  const [isClearingTeams, setIsClearingTeams] = useState(false);
   const [isSubmittingMatch, setIsSubmittingMatch] = useState(false);
   const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
   const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
@@ -680,6 +682,31 @@ export default function App() {
       reportError("Falha ao gerar times.", error);
     } finally {
       setIsGeneratingTeams(false);
+    }
+  };
+
+  const handleClearGeneratedTeams = async () => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsClearingTeams(true);
+    setScreenError(undefined);
+
+    try {
+      const updatedMatch = await clearGeneratedTeams(token, currentMatch.id);
+      const refreshedAttendance = await listAttendance(token, currentMatch.id);
+      setAttendance(refreshedAttendance);
+      setMatches((prev) =>
+        prev.map((entry) => (entry.id === updatedMatch.id ? updatedMatch : entry)),
+      );
+      setCurrentMatch(updatedMatch);
+      resetGeneratedTeams();
+      reportSuccess("Times desfeitos. Gere uma nova sugestão quando quiser.");
+    } catch (error) {
+      reportError("Falha ao desfazer times.", error);
+    } finally {
+      setIsClearingTeams(false);
     }
   };
 
@@ -1538,6 +1565,7 @@ export default function App() {
                 averageOverallGap={averageOverallGap}
                 isLoading={isPreMatchLoading}
                 isGeneratingTeams={isGeneratingTeams}
+                isClearingTeams={isClearingTeams}
                 isSubmittingRatings={isSubmittingRatings}
                 isSubmittingMatch={isSubmittingMatch}
                 isSubmittingAttendance={isSubmittingAttendance}
@@ -1557,6 +1585,7 @@ export default function App() {
                 onRemoveAttendance={(attendanceId) => handleRemoveAttendance(attendanceId)}
                 onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
+                onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
               />
@@ -1575,6 +1604,7 @@ export default function App() {
                 averageOverallGap={averageOverallGap}
                 isLoading={isPreMatchLoading}
                 isGeneratingTeams={isGeneratingTeams}
+                isClearingTeams={isClearingTeams}
                 isSubmittingRatings={isSubmittingRatings}
                 isSubmittingMatch={isSubmittingMatch}
                 isSubmittingAttendance={isSubmittingAttendance}
@@ -1594,6 +1624,7 @@ export default function App() {
                 onRemoveAttendance={(attendanceId) => handleRemoveAttendance(attendanceId)}
                 onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
+                onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
               />

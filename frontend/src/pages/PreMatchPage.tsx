@@ -93,6 +93,7 @@ export function PreMatchPage({
   generatedTeams,
   averageOverallGap,
   isGeneratingTeams,
+  isClearingTeams,
   isSubmittingRatings,
   isLoading,
   isSubmittingAttendance,
@@ -109,6 +110,7 @@ export function PreMatchPage({
   onRemoveAttendance,
   onMarkGuestFeePaid,
   onGenerateTeams,
+  onClearGeneratedTeams,
   ratingState,
   onSubmitPlayerRatings,
 }: PreMatchPageProps) {
@@ -125,6 +127,7 @@ export function PreMatchPage({
   const isEditableMatch = Boolean(match && (match.status === "OPEN" || match.status === "DRAFT"));
   const canEditAttendance = canManageAttendance && isEditableMatch;
   const canRunGeneration = canManageMatch && isEditableMatch && confirmedCount >= 2;
+  const canClearGeneratedTeams = canRunGeneration && generatedTeams.length > 0;
   const ratingItems = ratingState?.items ?? [];
   const completedRatingCount = ratingItems.filter((item) => Boolean(ratingDraft[item.attendanceId])).length;
   const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
@@ -418,7 +421,7 @@ export function PreMatchPage({
             <button
               type="button"
               className="primary-button"
-              disabled={!canRunGeneration || isGeneratingTeams}
+              disabled={!canRunGeneration || isGeneratingTeams || isClearingTeams}
               onClick={() => void onGenerateTeams(match?.expectedTeamCount ?? 2)}
             >
               {isGeneratingTeams ? "Balanceando..." : "Gerar times equilibrados"}
@@ -768,8 +771,20 @@ export function PreMatchPage({
 
         <div className="team-board glass-card">
           <div className="ledger-heading">
-            <h3>Times sugeridos</h3>
-            <span className="muted">Gap médio {averageOverallGap ?? 0}</span>
+            <div>
+              <h3>Times sugeridos</h3>
+              <span className="muted">Gap médio {averageOverallGap ?? 0}</span>
+            </div>
+            {canManageMatch && (
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={!canClearGeneratedTeams || isGeneratingTeams || isClearingTeams}
+                onClick={() => void onClearGeneratedTeams()}
+              >
+                {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
+              </button>
+            )}
           </div>
           <div className="team-rows">
             {generatedTeams.length === 0 ? (
