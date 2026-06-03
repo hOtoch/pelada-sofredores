@@ -5,6 +5,7 @@ import type {
   GeneratedTeam,
   MatchSummary,
   MatchPlayerRatingState,
+  OverallHistorySnapshot,
   PlayerSummary,
   TeamGenerationResult,
   TransactionRecord,
@@ -182,6 +183,30 @@ type RawMatchPlayerRatingState = {
   items: RawMatchPlayerRatingItem[];
   log: RawMatchPlayerRatingLogEntry[];
   overall_summary: RawMatchPlayerOverallSummary[];
+};
+
+type RawOverallHistoryPlayer = {
+  player_id: string;
+  display_name: string;
+  is_active: boolean;
+};
+
+type RawOverallHistoryPoint = {
+  player_id: string;
+  display_name: string;
+  overall: number;
+};
+
+type RawOverallHistoryMatch = {
+  match_id: string;
+  scheduled_at: string;
+  location: string;
+  points: RawOverallHistoryPoint[];
+};
+
+type RawOverallHistorySnapshot = {
+  players: RawOverallHistoryPlayer[];
+  matches: RawOverallHistoryMatch[];
 };
 
 type RawMatchPlayerRatingLogEntry = {
@@ -588,6 +613,26 @@ function mapMatchPlayerRatingState(raw: RawMatchPlayerRatingState): MatchPlayerR
   };
 }
 
+function mapOverallHistorySnapshot(raw: RawOverallHistorySnapshot): OverallHistorySnapshot {
+  return {
+    players: raw.players.map((player) => ({
+      playerId: player.player_id,
+      displayName: player.display_name,
+      isActive: player.is_active,
+    })),
+    matches: raw.matches.map((match) => ({
+      matchId: match.match_id,
+      scheduledAt: match.scheduled_at,
+      location: match.location || undefined,
+      points: match.points.map((point) => ({
+        playerId: point.player_id,
+        displayName: point.display_name,
+        overall: point.overall,
+      })),
+    })),
+  };
+}
+
 export async function login(identifier: string, password: string) {
   const data = await request<{ token: string; user: RawUser }>("/auth/login/", {
     method: "POST",
@@ -927,6 +972,11 @@ export async function listAttendance(token: string, matchId: string) {
   return data.map(mapAttendance);
 }
 
+export async function listGuestFeeDebts(token: string) {
+  const data = await request<RawAttendance[]>("/attendance/?guest_fee_due=true", undefined, token);
+  return data.map(mapAttendance);
+}
+
 export async function generateTeams(token: string, matchId: string, teamCount: number) {
   return request<RawTeamGenerationResult>(
     `/matches/${matchId}/generate-teams/`,
@@ -956,6 +1006,15 @@ export async function getMatchPlayerRatings(token: string, matchId: string) {
     token,
   );
   return mapMatchPlayerRatingState(data);
+}
+
+export async function getOverallHistory(token: string) {
+  const data = await request<RawOverallHistorySnapshot>(
+    "/matches/overall-history/",
+    undefined,
+    token,
+  );
+  return mapOverallHistorySnapshot(data);
 }
 
 export async function submitMatchPlayerRatings(

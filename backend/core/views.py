@@ -472,6 +472,54 @@ class MatchViewSet(viewsets.ModelViewSet):
 
         return Response(self.get_serializer(match).data)
 
+    @action(detail=False, methods=["get"], url_path="overall-history")
+    def overall_history(self, request):
+        finalize_due_match_ratings()
+        member_players = Player.objects.filter(player_type=Player.PlayerType.MEMBER).order_by("full_name")
+        players_payload = [
+            {
+                "player_id": str(player.id),
+                "display_name": player.nickname or player.full_name,
+                "is_active": player.is_active,
+            }
+            for player in member_players
+        ]
+        member_player_ids = [player.id for player in member_players]
+        entries = (
+            MatchAttendance.objects.select_related("match", "player")
+            .filter(
+                match__status__in=FINAL_MATCH_STATUSES,
+                attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+                player_id__in=member_player_ids,
+            )
+            .order_by("match__scheduled_at", "display_name")
+        )
+
+        matches_by_id = {}
+        for entry in entries:
+            match_payload = matches_by_id.setdefault(
+                entry.match_id,
+                {
+                    "match_id": str(entry.match_id),
+                    "scheduled_at": entry.match.scheduled_at,
+                    "location": entry.match.location,
+                    "points": [],
+                },
+            )
+            match_payload["points"].append(
+                {
+                    "player_id": str(entry.player_id),
+                    "display_name": entry.player.nickname or entry.player.full_name,
+                    "overall": entry.overall,
+                }
+            )
+
+        payload = {
+            "players": players_payload,
+            "matches": list(matches_by_id.values()),
+        }
+        return Response(payload)
+
     def _get_rating_lock_reason(self, match):
         if match.status != Match.Status.ARCHIVED:
             return "Avaliações liberadas após o arquivamento da pelada."
@@ -724,6 +772,15 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 match__status__in=[Match.Status.OPEN, Match.Status.CLOSED, Match.Status.ARCHIVED]
             ).distinct()
+        guest_fee_due = self.request.query_params.get("guest_fee_due")
+        if guest_fee_due in {"1", "true", "True"}:
+            return queryset.filter(
+                is_guest=True,
+                attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+                guest_fee_status=MatchAttendance.GuestFeeStatus.PENDING,
+                guest_fee_amount__gt=Decimal("0.00"),
+                match__status__in=FINAL_MATCH_STATUSES,
+            ).order_by("-match__scheduled_at", "display_name")
         match_id = self.request.query_params.get("match")
         if match_id:
             queryset = queryset.filter(match_id=match_id)

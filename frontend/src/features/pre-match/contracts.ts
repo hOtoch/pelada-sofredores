@@ -5,6 +5,7 @@ import type {
   MatchPlayerRatingState,
   MatchStatus,
   MatchSummary,
+  OverallHistorySnapshot,
   PlayerSummary,
   PlayerRatings,
 } from "../../domain/types";
@@ -76,6 +77,7 @@ export interface PreMatchPageProps {
   onGenerateTeams: (teamCount: number) => Promise<void> | void;
   onClearGeneratedTeams: () => Promise<void> | void;
   ratingState?: MatchPlayerRatingState | null;
+  overallHistory?: OverallHistorySnapshot | null;
   onFinalizeRatings?: () => Promise<void> | void;
   onRecalculateRatings?: () => Promise<void> | void;
   onSubmitPlayerRatings?: (ratings: MatchPlayerRatingInput[]) => Promise<void> | void;

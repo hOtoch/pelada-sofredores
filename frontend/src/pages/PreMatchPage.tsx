@@ -5,6 +5,7 @@ import type {
   MatchPlayerOverallSummary,
   MatchPlayerRatingInput,
   MatchStatus,
+  OverallHistorySnapshot,
 } from "../domain/types";
 import type {
   GuestFormValues,
@@ -68,6 +69,22 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
+
+const ratingWindowDurationMs = 24 * 60 * 60 * 1000;
+const overallHistoryPalette = [
+  "#34d399",
+  "#60a5fa",
+  "#f97316",
+  "#f472b6",
+  "#facc15",
+  "#a78bfa",
+  "#22d3ee",
+  "#fb7185",
+  "#84cc16",
+  "#e879f9",
+  "#38bdf8",
+  "#f59e0b",
+];
 
 const escapeCsvCell = (value: string | number | null | undefined) => {
   const normalized = String(value ?? "");
@@ -134,6 +151,259 @@ const drawOverallDeltaIcon = (
   context.stroke();
 };
 
+const buildOverallHistoryPath = (points: Array<{ x: number; y: number } | null>) => {
+  let path = "";
+  let isDrawing = false;
+
+  points.forEach((point) => {
+    if (!point) {
+      isDrawing = false;
+      return;
+    }
+
+    path += `${isDrawing ? "L" : "M"} ${point.x.toFixed(2)} ${point.y.toFixed(2)} `;
+    isDrawing = true;
+  });
+
+  return path.trim();
+};
+
+function OverallHistoryPanel({
+  overallHistory,
+}: {
+  overallHistory?: OverallHistorySnapshot | null;
+}) {
+  const chartData = useMemo(() => {
+    const matches = [...(overallHistory?.matches ?? [])].sort((left, right) =>
+      left.scheduledAt.localeCompare(right.scheduledAt),
+    );
+    const players = overallHistory?.players ?? [];
+    const overallByMatchAndPlayer = new Map<string, number>();
+
+    matches.forEach((historyMatch) => {
+      historyMatch.points.forEach((point) => {
+        overallByMatchAndPlayer.set(`${historyMatch.matchId}:${point.playerId}`, point.overall);
+      });
+    });
+
+    const series = players
+      .map((player, playerIndex) => {
+        const values = matches.map(
+          (historyMatch) =>
+            overallByMatchAndPlayer.get(`${historyMatch.matchId}:${player.playerId}`) ?? null,
+        );
+        const presentValues = values.filter((value): value is number => value !== null);
+        const firstOverall = presentValues[0] ?? null;
+        const lastOverall = presentValues[presentValues.length - 1] ?? null;
+
+        return {
+          ...player,
+          color: overallHistoryPalette[playerIndex % overallHistoryPalette.length],
+          values,
+          presentValues,
+          firstOverall,
+          lastOverall,
+          delta:
+            firstOverall === null || lastOverall === null
+              ? null
+              : lastOverall - firstOverall,
+        };
+      })
+      .filter((player) => player.presentValues.length > 0);
+
+    const allValues = series.flatMap((player) => player.presentValues);
+    if (matches.length === 0 || allValues.length === 0) {
+      return { matches, series, yMin: 0, yMax: 99, yTicks: [] as number[] };
+    }
+
+    const rawMin = Math.min(...allValues);
+    const rawMax = Math.max(...allValues);
+    let yMin = Math.max(0, Math.floor((rawMin - 4) / 5) * 5);
+    let yMax = Math.min(99, Math.ceil((rawMax + 4) / 5) * 5);
+
+    if (yMax - yMin < 12) {
+      const padding = Math.ceil((12 - (yMax - yMin)) / 2);
+      yMin = Math.max(0, yMin - padding);
+      yMax = Math.min(99, yMax + padding);
+    }
+
+    if (yMax <= yMin) {
+      yMax = Math.min(99, yMin + 10);
+    }
+
+    const yTicks = Array.from({ length: 6 }, (_, index) =>
+      Math.round(yMin + ((yMax - yMin) * index) / 5),
+    ).reverse();
+
+    return { matches, series, yMin, yMax, yTicks };
+  }, [overallHistory]);
+
+  const width = 960;
+  const height = 380;
+  const margin = { top: 26, right: 28, bottom: 58, left: 58 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const { matches, series, yMin, yMax, yTicks } = chartData;
+  const xForIndex = (index: number) =>
+    matches.length === 1
+      ? margin.left + plotWidth / 2
+      : margin.left + (plotWidth * index) / Math.max(matches.length - 1, 1);
+  const yForOverall = (overall: number) =>
+    margin.top + ((yMax - overall) / Math.max(yMax - yMin, 1)) * plotHeight;
+  const labelStep = Math.max(1, Math.ceil(matches.length / 6));
+
+  return (
+    <div className="overall-history-panel glass-card">
+      <div className="ledger-heading">
+        <div>
+          <p className="eyebrow">Histórico</p>
+          <h3>Evolução dos overalls</h3>
+          <small className="muted">
+            {series.length} mensalista(s) em {matches.length} pelada(s) registrada(s)
+          </small>
+        </div>
+      </div>
+
+      {series.length === 0 ? (
+        <p className="empty-state">Ainda não há histórico de overall em peladas registradas.</p>
+      ) : (
+        <>
+          <div className="overall-history-chart-shell">
+            <svg
+              className="overall-history-chart"
+              viewBox={`0 0 ${width} ${height}`}
+              role="img"
+              aria-label="Histórico de overall dos mensalistas por pelada"
+            >
+              <rect
+                x={margin.left}
+                y={margin.top}
+                width={plotWidth}
+                height={plotHeight}
+                className="overall-history-plot"
+              />
+              {yTicks.map((tick) => {
+                const y = yForOverall(tick);
+                return (
+                  <g key={tick}>
+                    <line
+                      x1={margin.left}
+                      x2={width - margin.right}
+                      y1={y}
+                      y2={y}
+                      className="overall-history-grid-line"
+                    />
+                    <text
+                      x={margin.left - 12}
+                      y={y + 4}
+                      textAnchor="end"
+                      className="overall-history-grid-label"
+                    >
+                      {tick}
+                    </text>
+                  </g>
+                );
+              })}
+              {matches.map((historyMatch, index) => {
+                const x = xForIndex(index);
+                const shouldShowLabel =
+                  matches.length <= 6 ||
+                  index === 0 ||
+                  index === matches.length - 1 ||
+                  index % labelStep === 0;
+
+                return (
+                  <g key={historyMatch.matchId}>
+                    <line
+                      x1={x}
+                      x2={x}
+                      y1={margin.top}
+                      y2={height - margin.bottom}
+                      className="overall-history-vertical-line"
+                    />
+                    {shouldShowLabel ? (
+                      <text
+                        x={x}
+                        y={height - 25}
+                        textAnchor="end"
+                        transform={`rotate(-35 ${x} ${height - 25})`}
+                        className="overall-history-axis-label"
+                      >
+                        {new Date(historyMatch.scheduledAt).toLocaleDateString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                        })}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              })}
+              {series.map((player) => {
+                const points = player.values.map((overall, index) =>
+                  overall === null ? null : { x: xForIndex(index), y: yForOverall(overall) },
+                );
+                const path = buildOverallHistoryPath(points);
+
+                return (
+                  <g key={player.playerId}>
+                    {path ? (
+                      <path
+                        d={path}
+                        className="overall-history-line"
+                        style={{ stroke: player.color }}
+                      />
+                    ) : null}
+                    {player.values.map((overall, index) =>
+                      overall === null ? null : (
+                        <circle
+                          key={`${player.playerId}-${matches[index].matchId}`}
+                          cx={xForIndex(index)}
+                          cy={yForOverall(overall)}
+                          r="4.4"
+                          className="overall-history-point"
+                          style={{ fill: player.color }}
+                        >
+                          <title>
+                            {player.displayName} · {overall} OVR ·{" "}
+                            {formatDateTime(matches[index].scheduledAt)}
+                          </title>
+                        </circle>
+                      ),
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          <div className="overall-history-legend" aria-label="Mensalistas no histórico">
+            {series.map((player) => (
+              <div key={player.playerId} className="overall-history-legend-item">
+                <span
+                  className="overall-history-swatch"
+                  style={{ backgroundColor: player.color }}
+                  aria-hidden="true"
+                />
+                <strong>{player.displayName}</strong>
+                <span>{player.lastOverall} OVR</span>
+                {player.delta !== null ? (
+                  <span
+                    className={`overall-history-delta ${
+                      player.delta > 0 ? "positive" : player.delta < 0 ? "negative" : ""
+                    }`}
+                  >
+                    {player.delta > 0 ? `+${player.delta}` : player.delta}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PreMatchPage({
   matches,
   match,
@@ -164,6 +434,7 @@ export function PreMatchPage({
   onGenerateTeams,
   onClearGeneratedTeams,
   ratingState,
+  overallHistory,
   onFinalizeRatings,
   onRecalculateRatings,
   onSubmitPlayerRatings,
@@ -207,6 +478,22 @@ export function PreMatchPage({
     () => [...matches].sort((left, right) => right.scheduledAt.localeCompare(left.scheduledAt)),
     [matches],
   );
+  const hasOpenRatingWindow = useMemo(
+    () =>
+      matches.some((entry) => {
+        if (entry.status !== "ARCHIVED" || entry.ratingsFinalizedAt) {
+          return false;
+        }
+
+        if (!entry.archivedAt) {
+          return true;
+        }
+
+        return Date.now() < new Date(entry.archivedAt).getTime() + ratingWindowDurationMs;
+      }),
+    [matches],
+  );
+  const shouldShowOverallHistory = activeSection === "ratings" && !hasOpenRatingWindow;
 
   useEffect(() => {
     setResultSummary(match?.resultSummary ?? "");
@@ -1063,6 +1350,8 @@ export function PreMatchPage({
       </div>
 
         </>
+      ) : shouldShowOverallHistory ? (
+        <OverallHistoryPanel overallHistory={overallHistory} />
       ) : (
         <div className="rating-arena glass-card">
           <div className="ledger-heading rating-arena-heading">

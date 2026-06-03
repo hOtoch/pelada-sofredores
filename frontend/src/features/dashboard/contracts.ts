@@ -1,4 +1,10 @@
-import type { CashFlowSummary, PlayerSummary, TransactionRecord } from "../../domain/types";
+import type {
+  AttendanceEntry,
+  CashFlowSummary,
+  MatchSummary,
+  PlayerSummary,
+  TransactionRecord,
+} from "../../domain/types";
 import type {
   DashboardAnalyticsPeriod,
   DashboardAnalyticsSnapshot,
@@ -35,6 +41,8 @@ export interface FinanceDashboardPageProps {
   summary: CashFlowSummary;
   transactions: TransactionRecord[];
   players: PlayerSummary[];
+  matches: MatchSummary[];
+  guestFeeDebts: AttendanceEntry[];
   analyticsSnapshot?: DashboardAnalyticsSnapshot | null;
   seasonOverview?: DashboardSeasonOverviewSnapshot | null;
   presenceRanking?: DashboardPresenceRankingEntry[] | null;
@@ -42,10 +50,12 @@ export interface FinanceDashboardPageProps {
   selectedAnalyticsPeriod?: DashboardAnalyticsPeriod;
   isLoading: boolean;
   isSubmittingTransaction: boolean;
+  isSubmittingGuestFee: boolean;
   canManageCash: boolean;
   onAddTransaction: (values: TransactionFormValues) => Promise<void> | void;
   onEditTransaction: (transactionId: string, values: TransactionFormValues) => Promise<void> | void;
   onVoidTransaction: (transactionId: string) => Promise<void> | void;
+  onMarkGuestFeePaid: (attendanceId: string) => Promise<void> | void;
   onAnalyticsPeriodChange?: (period: DashboardAnalyticsPeriod) => void;
   onOpenLedger?: () => void;
 }

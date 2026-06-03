@@ -39,6 +39,12 @@ const formatMonthLabel = (value: string) =>
     year: "numeric",
   });
 
+const formatMatchDateTime = (value: string) =>
+  new Date(value).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+
 const escapeCsvCell = (value: string | number | null | undefined) => {
   const normalized = String(value ?? "");
   if (/[",;\n]/.test(normalized)) {
@@ -161,6 +167,8 @@ export function DashboardPage({
   summary,
   transactions,
   players,
+  matches,
+  guestFeeDebts,
   analyticsSnapshot,
   seasonOverview,
   presenceRanking,
@@ -168,10 +176,12 @@ export function DashboardPage({
   selectedAnalyticsPeriod,
   isLoading,
   isSubmittingTransaction,
+  isSubmittingGuestFee,
   canManageCash,
   onAddTransaction,
   onEditTransaction,
   onVoidTransaction,
+  onMarkGuestFeePaid,
   onAnalyticsPeriodChange,
   onOpenLedger,
 }: FinanceDashboardPageProps) {
@@ -208,6 +218,16 @@ export function DashboardPage({
         ]),
       ),
     [players],
+  );
+
+  const matchById = useMemo(
+    () => new Map(matches.map((entry) => [entry.id, entry])),
+    [matches],
+  );
+
+  const guestFeeDebtTotal = useMemo(
+    () => guestFeeDebts.reduce((total, entry) => total + entry.guestFeeOutstanding, 0),
+    [guestFeeDebts],
   );
 
   const filteredTransactions = useMemo(() => {
@@ -716,6 +736,53 @@ export function DashboardPage({
           <p>{averageAttendanceRate.toFixed(0)}%</p>
           <small className="dashboard-summary-note">{presenceRankingData.length} no ranking</small>
         </div>
+      </div>
+
+      <div className="glass-card dashboard-panel">
+        <div className="ledger-heading">
+          <div>
+            <h3>Convidados a pagar</h3>
+            <small className="muted">
+              {guestFeeDebts.length} convidado(s) com taxa avulsa pendente
+            </small>
+          </div>
+          <span className="status-chip pending">{formatCurrency(guestFeeDebtTotal)}</span>
+        </div>
+        {guestFeeDebts.length === 0 ? (
+          <p className="empty-state">Nenhum convidado com pagamento pendente.</p>
+        ) : (
+          <div className="guest-fee-list">
+            {guestFeeDebts.map((entry) => {
+              const matchEntry = matchById.get(entry.matchId);
+              const matchLocation = matchEntry?.location ? ` · ${matchEntry.location}` : "";
+              const matchLabel = matchEntry
+                ? `${formatMatchDateTime(matchEntry.scheduledAt)}${matchLocation}`
+                : "Pelada não localizada";
+
+              return (
+                <article key={entry.id} className="guest-fee-row">
+                  <div>
+                    <strong>{entry.displayName}</strong>
+                    <p className="muted">{matchLabel}</p>
+                  </div>
+                  <div className="guest-fee-actions">
+                    <strong>{formatCurrency(entry.guestFeeOutstanding)}</strong>
+                    {canManageCash && (
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={isSubmittingGuestFee}
+                        onClick={() => void onMarkGuestFeePaid(entry.id)}
+                      >
+                        Marcar pago
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="glass-card dashboard-panel dashboard-panel-hero">

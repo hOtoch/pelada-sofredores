@@ -22,6 +22,7 @@ import type {
   MatchPlayerRatingInput,
   MatchPlayerRatingState,
   MatchSummary,
+  OverallHistorySnapshot,
   PlayerRatings,
   PlayerSummary,
   TransactionRecord,
@@ -62,7 +63,9 @@ import {
   getPortalOverview,
   getPresenceRanking,
   getSeasonOverview,
+  getOverallHistory,
   listAttendance,
+  listGuestFeeDebts,
   listMatches,
   listPlayers,
   listTransactions,
@@ -285,6 +288,7 @@ export default function App() {
   const [toasts, setToasts] = useState<AppToast[]>([]);
   const [summary, setSummary] = useState<CashFlowSummary>(emptyCashFlow);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [guestFeeDebts, setGuestFeeDebts] = useState<AttendanceEntry[]>([]);
   const [players, setPlayers] = useState<PlayerSummary[]>([]);
   const [accounts, setAccounts] = useState<AccessAccountSummary[]>([]);
   const [seasonOverview, setSeasonOverview] = useState<DashboardSeasonOverviewSnapshot | null>(null);
@@ -296,6 +300,7 @@ export default function App() {
   const [portalUpcomingMatches, setPortalUpcomingMatches] = useState<UpcomingMatchSnapshot[]>([]);
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [currentMatch, setCurrentMatch] = useState<MatchSummary | null>(null);
+  const [overallHistory, setOverallHistory] = useState<OverallHistorySnapshot | null>(null);
   const [attendance, setAttendance] = useState<AttendanceEntry[]>([]);
   const [generatedTeams, setGeneratedTeams] = useState<GeneratedTeam[]>([]);
   const [averageOverallGap, setAverageOverallGap] = useState<number | null>(null);
@@ -326,6 +331,7 @@ export default function App() {
     Promise.all([
       getFinancialSummary(authToken),
       listTransactions(authToken),
+      listGuestFeeDebts(authToken),
     ]);
 
   const fetchPortalData = async (authToken: string) => getPortalOverview(authToken);
@@ -409,6 +415,8 @@ export default function App() {
     if (!token) {
       setCurrentUser(null);
       setAccounts([]);
+      setGuestFeeDebts([]);
+      setOverallHistory(null);
       setSeasonOverview(null);
       setPresenceRanking([]);
       setPaymentRanking([]);
@@ -474,12 +482,24 @@ export default function App() {
         const financePromise =
           currentUser.role === "ADMIN"
             ? fetchFinancialData(token)
-            : Promise.all([Promise.resolve(emptyCashFlow), listTransactions(token)] as const);
+            : Promise.all([
+                Promise.resolve(emptyCashFlow),
+                listTransactions(token),
+                Promise.resolve([] as AttendanceEntry[]),
+              ] as const);
 
-        const [[financialSummary, ledger], squad, matchData, portalData, adminData] = await Promise.all([
+        const [
+          [financialSummary, ledger, nextGuestFeeDebts],
+          squad,
+          matchData,
+          overallHistoryData,
+          portalData,
+          adminData,
+        ] = await Promise.all([
           financePromise,
           listPlayers(token),
           fetchMatchData(token),
+          getOverallHistory(token),
           portalPromise,
           adminPromise,
         ]);
@@ -490,7 +510,9 @@ export default function App() {
 
         setSummary(financialSummary);
         setTransactions(ledger);
+        setGuestFeeDebts(nextGuestFeeDebts);
         setPlayers(squad);
+        setOverallHistory(overallHistoryData);
         const visibleMatches =
           currentUser.role === "COMMON"
             ? matchData.matches.filter((entry) => entry.status !== "DRAFT")
@@ -750,16 +772,18 @@ export default function App() {
 
     try {
       const nextRatingState = await finalizeMatchRatings(token, currentMatch.id);
-      const [nextPlayers, matchData, nextAttendance] = await Promise.all([
+      const [nextPlayers, matchData, nextAttendance, overallHistoryData] = await Promise.all([
         listPlayers(token),
         fetchMatchData(token, currentMatch.id),
         listAttendance(token, currentMatch.id),
+        getOverallHistory(token),
       ]);
       setMatchRatingState(nextRatingState);
       setPlayers(nextPlayers);
       setMatches(matchData.matches);
       setCurrentMatch(matchData.selectedMatch);
       setAttendance(nextAttendance);
+      setOverallHistory(overallHistoryData);
       reportSuccess("Janela de notas finalizada e overalls atualizados.");
     } catch (error) {
       reportError("Falha ao finalizar a janela de notas.", error);
@@ -779,13 +803,15 @@ export default function App() {
 
     try {
       const nextRatingState = await recalculateMatchRatings(token, currentMatch.id);
-      const [nextPlayers, nextAttendance] = await Promise.all([
+      const [nextPlayers, nextAttendance, overallHistoryData] = await Promise.all([
         listPlayers(token),
         listAttendance(token, currentMatch.id),
+        getOverallHistory(token),
       ]);
       setMatchRatingState(nextRatingState);
       setPlayers(nextPlayers);
       setAttendance(nextAttendance);
+      setOverallHistory(overallHistoryData);
       reportSuccess("Overalls recalculados com a regra atual.");
     } catch (error) {
       reportError("Falha ao recalcular os overalls.", error);
@@ -860,17 +886,20 @@ export default function App() {
 
     try {
       await patchMatchStatusRequest(token, matchId, nextStatus);
-      const [matchData, financialData] = await Promise.all([
+      const [matchData, financialData, overallHistoryData] = await Promise.all([
         fetchMatchData(token, matchId),
         isAdmin ? fetchFinancialData(token) : Promise.resolve(null),
+        getOverallHistory(token),
         refreshAdminDataState(token),
       ]);
       setMatches(matchData.matches);
       setCurrentMatch(matchData.selectedMatch);
+      setOverallHistory(overallHistoryData);
       if (financialData) {
-        const [cashFlow, ledger] = financialData;
+        const [cashFlow, ledger, nextGuestFeeDebts] = financialData;
         setSummary(cashFlow);
         setTransactions(ledger);
+        setGuestFeeDebts(nextGuestFeeDebts);
       }
       reportSuccess("Status da pelada atualizado.");
     } catch (error) {
@@ -913,12 +942,13 @@ export default function App() {
 
     try {
       await createTransactionRequest(token, values);
-      const [[financialSummary, ledger]] = await Promise.all([
+      const [[financialSummary, ledger, nextGuestFeeDebts]] = await Promise.all([
         fetchFinancialData(token),
         refreshAdminDataState(token),
       ]);
       setSummary(financialSummary);
       setTransactions(ledger);
+      setGuestFeeDebts(nextGuestFeeDebts);
       reportSuccess("Movimentação lançada no caixa.");
     } catch (error) {
       reportError("Falha ao lançar movimento.", error);
@@ -938,12 +968,13 @@ export default function App() {
 
     try {
       await updateTransactionRequest(token, transactionId, values);
-      const [[financialSummary, ledger]] = await Promise.all([
+      const [[financialSummary, ledger, nextGuestFeeDebts]] = await Promise.all([
         fetchFinancialData(token),
         refreshAdminDataState(token),
       ]);
       setSummary(financialSummary);
       setTransactions(ledger);
+      setGuestFeeDebts(nextGuestFeeDebts);
       reportSuccess("Lançamento atualizado com sucesso.");
     } catch (error) {
       reportError("Falha ao atualizar lançamento.", error);
@@ -963,12 +994,13 @@ export default function App() {
 
     try {
       await voidTransactionRequest(token, transactionId);
-      const [[financialSummary, ledger]] = await Promise.all([
+      const [[financialSummary, ledger, nextGuestFeeDebts]] = await Promise.all([
         fetchFinancialData(token),
         refreshAdminDataState(token),
       ]);
       setSummary(financialSummary);
       setTransactions(ledger);
+      setGuestFeeDebts(nextGuestFeeDebts);
       reportSuccess("Lançamento estornado com sucesso.");
     } catch (error) {
       reportError("Falha ao estornar lançamento.", error);
@@ -1222,15 +1254,16 @@ export default function App() {
 
     try {
       const updated = await markGuestFeePaidRequest(token, attendanceId);
-      const [cashFlow, ledger] = isAdmin
+      const [cashFlow, ledger, nextGuestFeeDebts] = isAdmin
         ? await fetchFinancialData(token)
-        : [summary, transactions] as const;
+        : [summary, transactions, guestFeeDebts] as const;
       setAttendance((prev) =>
         prev.map((entry) => (entry.id === attendanceId ? updated : entry)),
       );
       if (isAdmin) {
         setSummary(cashFlow);
         setTransactions(ledger);
+        setGuestFeeDebts(nextGuestFeeDebts);
         await refreshAdminDataState(token);
       }
       reportSuccess("Taxa de convidado marcada como paga.");
@@ -1533,15 +1566,19 @@ export default function App() {
                   summary={summary}
                   transactions={transactions}
                   players={players}
+                  matches={matches}
+                  guestFeeDebts={guestFeeDebts}
                   seasonOverview={seasonOverview}
                   presenceRanking={presenceRanking}
                   paymentRanking={paymentRanking}
                   isLoading={isDashboardLoading}
                   isSubmittingTransaction={isSubmittingTransaction}
+                  isSubmittingGuestFee={isSubmittingAttendance}
                   canManageCash={isAdmin}
                   onAddTransaction={(values) => handleCreateTransaction(values)}
                   onEditTransaction={(transactionId, values) => handleEditTransaction(transactionId, values)}
                   onVoidTransaction={(transactionId) => handleVoidTransaction(transactionId)}
+                  onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
                   onOpenLedger={() => null}
                 />
               ) : (
@@ -1648,6 +1685,7 @@ export default function App() {
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
+                overallHistory={overallHistory}
                 onFinalizeRatings={() => handleFinalizeRatings()}
                 onRecalculateRatings={() => handleRecalculateRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
@@ -1691,6 +1729,7 @@ export default function App() {
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
+                overallHistory={overallHistory}
                 onFinalizeRatings={() => handleFinalizeRatings()}
                 onRecalculateRatings={() => handleRecalculateRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}

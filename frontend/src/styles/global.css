@@ -1423,6 +1423,110 @@ button {
   color: var(--color-text-secondary);
 }
 
+.overall-history-panel {
+  padding: 1.5rem;
+}
+
+.overall-history-chart-shell {
+  width: 100%;
+  margin-top: 1.2rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    rgba(10, 9, 14, 0.3);
+}
+
+.overall-history-chart {
+  display: block;
+  min-width: 760px;
+  width: 100%;
+  height: auto;
+}
+
+.overall-history-plot {
+  fill: rgba(255, 255, 255, 0.025);
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.overall-history-grid-line,
+.overall-history-vertical-line {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.overall-history-vertical-line {
+  stroke-dasharray: 4 8;
+}
+
+.overall-history-grid-label,
+.overall-history-axis-label {
+  fill: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.overall-history-line {
+  fill: none;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+.overall-history-point {
+  stroke: #16111f;
+  stroke-width: 2;
+}
+
+.overall-history-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.65rem 0.9rem;
+  margin-top: 1rem;
+}
+
+.overall-history-legend-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+}
+
+.overall-history-legend-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overall-history-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+}
+
+.overall-history-delta {
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.overall-history-delta.positive {
+  color: #34d399;
+}
+
+.overall-history-delta.negative {
+  color: #fb7185;
+}
+
 .rating-card-grid {
   position: relative;
   display: grid;
@@ -2118,6 +2222,14 @@ select.input-field option:checked {
 
   .rating-arena {
     padding: 1rem;
+  }
+
+  .overall-history-panel {
+    padding: 1rem;
+  }
+
+  .overall-history-legend {
+    grid-template-columns: 1fr;
   }
 
   .rating-carousel-shell {

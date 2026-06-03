@@ -180,6 +180,30 @@ export interface MatchPlayerRatingState {
   overallSummary: MatchPlayerOverallSummary[];
 }
 
+export interface OverallHistoryPlayer {
+  playerId: string;
+  displayName: string;
+  isActive: boolean;
+}
+
+export interface OverallHistoryPoint {
+  playerId: string;
+  displayName: string;
+  overall: number;
+}
+
+export interface OverallHistoryMatch {
+  matchId: string;
+  scheduledAt: ISODateTimeString;
+  location?: string;
+  points: OverallHistoryPoint[];
+}
+
+export interface OverallHistorySnapshot {
+  players: OverallHistoryPlayer[];
+  matches: OverallHistoryMatch[];
+}
+
 export interface MatchPlayerRatingInput {
   attendanceId: string;
   score: number;

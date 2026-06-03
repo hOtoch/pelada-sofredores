@@ -180,11 +180,15 @@ class ApiFlowTests(APITestCase):
 
         summary_response = self.client.get("/api/dashboard/financial-summary/")
         attendance_response = self.client.get(f"/api/attendance/?match={self.match.id}")
+        guest_fee_due_response = self.client.get("/api/attendance/?guest_fee_due=true")
         paid_response = self.client.post(f"/api/attendance/{guest.id}/mark-guest-fee-paid/")
         next_summary_response = self.client.get("/api/dashboard/financial-summary/")
+        next_guest_fee_due_response = self.client.get("/api/attendance/?guest_fee_due=true")
 
         self.assertEqual(summary_response.status_code, 200)
         self.assertEqual(Decimal(summary_response.data["pending_total"]), Decimal("59.00"))
+        self.assertEqual(guest_fee_due_response.status_code, 200)
+        self.assertEqual([item["id"] for item in guest_fee_due_response.data], [str(guest.id)])
         guest_payload = next(item for item in attendance_response.data if item["id"] == str(guest.id))
         self.assertTrue(guest_payload["guest_fee_is_due"])
         self.assertEqual(Decimal(guest_payload["guest_fee_outstanding"]), Decimal("14.00"))
@@ -192,6 +196,7 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(paid_response.data["guest_fee_status"], MatchAttendance.GuestFeeStatus.PAID)
         self.assertFalse(paid_response.data["guest_fee_is_due"])
         self.assertEqual(Decimal(next_summary_response.data["pending_total"]), Decimal("45.00"))
+        self.assertEqual(next_guest_fee_due_response.data, [])
         self.assertTrue(
             Transaction.objects.filter(
                 external_reference=f"guest-fee:{guest.id}",
@@ -255,6 +260,29 @@ class ApiFlowTests(APITestCase):
         self.assertFalse(
             MatchAttendance.objects.filter(match=self.match).exclude(assigned_team_name="").exists()
         )
+
+    def test_overall_history_lists_member_snapshots_for_all_authenticated_users(self) -> None:
+        self.match.status = Match.Status.CLOSED
+        self.match.save(update_fields=["status"])
+        MatchAttendance.objects.create(
+            match=self.match,
+            display_name="Convidado Historico",
+            is_guest=True,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            overall=66,
+        )
+
+        admin_response = self.client.get("/api/matches/overall-history/")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+        common_response = self.client.get("/api/matches/overall-history/")
+
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertEqual(common_response.status_code, 200)
+        self.assertIn(str(self.players[0].id), [item["player_id"] for item in admin_response.data["players"]])
+        self.assertEqual(len(admin_response.data["matches"]), 1)
+        history_points = admin_response.data["matches"][0]["points"]
+        self.assertIn(str(self.players[0].id), [item["player_id"] for item in history_points])
+        self.assertNotIn("Convidado Historico", [item["display_name"] for item in history_points])
 
     def test_admin_can_create_match_via_api(self) -> None:
         response = self.client.post(
