@@ -173,11 +173,28 @@ const getRatingWindowStartedAt = (match: { archivedAt?: string | null; updatedAt
   return Number.isFinite(timestamp) ? timestamp : null;
 };
 
+type OverallHistoryHoverPoint = {
+  playerId: string;
+  matchId: string;
+  displayName: string;
+  overall: number;
+  color: string;
+  scheduledAt: string;
+  location?: string;
+  x: number;
+  y: number;
+  delta: number | null;
+};
+
+const truncateTooltipText = (value: string, maxLength = 28) =>
+  value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
+
 function OverallHistoryPanel({
   overallHistory,
 }: {
   overallHistory?: OverallHistorySnapshot | null;
 }) {
+  const [hoveredPoint, setHoveredPoint] = useState<OverallHistoryHoverPoint | null>(null);
   const chartData = useMemo(() => {
     const matches = [...(overallHistory?.matches ?? [])].sort((left, right) =>
       left.scheduledAt.localeCompare(right.scheduledAt),
@@ -256,6 +273,25 @@ function OverallHistoryPanel({
   const yForOverall = (overall: number) =>
     margin.top + ((yMax - overall) / Math.max(yMax - yMin, 1)) * plotHeight;
   const labelStep = Math.max(1, Math.ceil(matches.length / 6));
+  const tooltipWidth = 236;
+  const tooltipHeight = 92;
+  const tooltipX = hoveredPoint
+    ? Math.min(
+        Math.max(hoveredPoint.x + 16, margin.left + 6),
+        width - margin.right - tooltipWidth,
+      )
+    : 0;
+  const tooltipY = hoveredPoint
+    ? Math.min(
+        Math.max(
+          hoveredPoint.y - tooltipHeight - 14 < margin.top
+            ? hoveredPoint.y + 18
+            : hoveredPoint.y - tooltipHeight - 14,
+          margin.top + 6,
+        ),
+        height - margin.bottom - tooltipHeight,
+      )
+    : 0;
 
   return (
     <div className="overall-history-panel glass-card">
@@ -264,7 +300,7 @@ function OverallHistoryPanel({
           <p className="eyebrow">Histórico</p>
           <h3>Evolução dos overalls</h3>
           <small className="muted">
-            {series.length} mensalista(s) em {matches.length} pelada(s) registrada(s)
+            {series.length} mensalista(s) em {matches.length} pelada(s) registrada(s) desde 26/05
           </small>
         </div>
       </div>
@@ -348,36 +384,126 @@ function OverallHistoryPanel({
                   overall === null ? null : { x: xForIndex(index), y: yForOverall(overall) },
                 );
                 const path = buildOverallHistoryPath(points);
+                const isHoveredSeries = hoveredPoint?.playerId === player.playerId;
+                const isDimmedSeries = Boolean(hoveredPoint && !isHoveredSeries);
 
                 return (
                   <g key={player.playerId}>
                     {path ? (
                       <path
                         d={path}
-                        className="overall-history-line"
+                        className={`overall-history-line ${
+                          isHoveredSeries ? "hovered" : isDimmedSeries ? "dimmed" : ""
+                        }`}
                         style={{ stroke: player.color }}
                       />
                     ) : null}
-                    {player.values.map((overall, index) =>
-                      overall === null ? null : (
-                        <circle
-                          key={`${player.playerId}-${matches[index].matchId}`}
-                          cx={xForIndex(index)}
-                          cy={yForOverall(overall)}
-                          r="4.4"
-                          className="overall-history-point"
-                          style={{ fill: player.color }}
-                        >
-                          <title>
-                            {player.displayName} · {overall} OVR ·{" "}
-                            {formatDateTime(matches[index].scheduledAt)}
-                          </title>
-                        </circle>
-                      ),
-                    )}
+                    {player.values.map((overall, index) => {
+                      if (overall === null) {
+                        return null;
+                      }
+
+                      const historyMatch = matches[index];
+                      const x = xForIndex(index);
+                      const y = yForOverall(overall);
+                      const previousValues = player.values
+                        .slice(0, index)
+                        .filter((value): value is number => value !== null);
+                      const previousOverall = previousValues[previousValues.length - 1] ?? null;
+                      const delta = previousOverall === null ? null : overall - previousOverall;
+                      const isHoveredPoint =
+                        hoveredPoint?.playerId === player.playerId &&
+                        hoveredPoint.matchId === historyMatch.matchId;
+                      const nextHoverPoint = {
+                        playerId: player.playerId,
+                        matchId: historyMatch.matchId,
+                        displayName: player.displayName,
+                        overall,
+                        color: player.color,
+                        scheduledAt: historyMatch.scheduledAt,
+                        location: historyMatch.location,
+                        x,
+                        y,
+                        delta,
+                      };
+
+                      return (
+                        <g key={`${player.playerId}-${historyMatch.matchId}`}>
+                          <circle
+                            cx={x}
+                            cy={y}
+                            r={isHoveredPoint ? "7.2" : "4.6"}
+                            className={`overall-history-point ${isHoveredPoint ? "hovered" : ""}`}
+                            style={{ fill: player.color }}
+                          />
+                          <circle
+                            cx={x}
+                            cy={y}
+                            r="15"
+                            className="overall-history-hit-point"
+                            tabIndex={0}
+                            aria-label={`${player.displayName}, ${overall} overall em ${formatDateTime(
+                              historyMatch.scheduledAt,
+                            )}`}
+                            onPointerEnter={() => setHoveredPoint(nextHoverPoint)}
+                            onPointerMove={() => setHoveredPoint(nextHoverPoint)}
+                            onPointerLeave={() => setHoveredPoint(null)}
+                            onFocus={() => setHoveredPoint(nextHoverPoint)}
+                            onBlur={() => setHoveredPoint(null)}
+                          />
+                        </g>
+                      );
+                    })}
                   </g>
                 );
               })}
+              {hoveredPoint ? (
+                <g
+                  className="overall-history-tooltip"
+                  transform={`translate(${tooltipX.toFixed(2)} ${tooltipY.toFixed(2)})`}
+                  pointerEvents="none"
+                >
+                  <rect
+                    width={tooltipWidth}
+                    height={tooltipHeight}
+                    rx="8"
+                    className="overall-history-tooltip-box"
+                  />
+                  <circle
+                    cx="18"
+                    cy="22"
+                    r="5"
+                    style={{ fill: hoveredPoint.color }}
+                    className="overall-history-tooltip-swatch"
+                  />
+                  <text x="31" y="26" className="overall-history-tooltip-name">
+                    {truncateTooltipText(hoveredPoint.displayName)}
+                  </text>
+                  <text x="18" y="50" className="overall-history-tooltip-meta">
+                    {new Date(hoveredPoint.scheduledAt).toLocaleString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    {hoveredPoint.location ? ` · ${truncateTooltipText(hoveredPoint.location, 18)}` : ""}
+                  </text>
+                  <text x="18" y="76" className="overall-history-tooltip-overall">
+                    {hoveredPoint.overall} OVR
+                  </text>
+                  {hoveredPoint.delta !== null ? (
+                    <text
+                      x="118"
+                      y="76"
+                      className={`overall-history-tooltip-delta ${
+                        hoveredPoint.delta > 0 ? "positive" : hoveredPoint.delta < 0 ? "negative" : ""
+                      }`}
+                    >
+                      {hoveredPoint.delta > 0 ? `+${hoveredPoint.delta}` : hoveredPoint.delta} desde anterior
+                    </text>
+                  ) : null}
+                </g>
+              ) : null}
             </svg>
           </div>
 

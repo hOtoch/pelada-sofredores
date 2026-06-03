@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
@@ -263,7 +263,22 @@ class ApiFlowTests(APITestCase):
 
     def test_overall_history_lists_member_snapshots_for_all_authenticated_users(self) -> None:
         self.match.status = Match.Status.CLOSED
-        self.match.save(update_fields=["status"])
+        self.match.scheduled_at = timezone.make_aware(datetime(2026, 5, 26, 20, 0))
+        self.match.save(update_fields=["status", "scheduled_at"])
+        old_match = Match.objects.create(
+            scheduled_at=timezone.make_aware(datetime(2026, 5, 25, 20, 0)),
+            status=Match.Status.CLOSED,
+            expected_team_count=2,
+            created_by=self.user,
+        )
+        MatchAttendance.objects.create(
+            match=old_match,
+            player=self.players[0],
+            display_name=self.players[0].full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            overall=55,
+        )
         MatchAttendance.objects.create(
             match=self.match,
             display_name="Convidado Historico",

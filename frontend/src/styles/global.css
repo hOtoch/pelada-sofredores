@@ -1473,11 +1473,93 @@ button {
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.9;
+  transition:
+    opacity 0.18s ease,
+    stroke-width 0.18s ease,
+    filter 0.18s ease;
+}
+
+.overall-history-line.hovered {
+  stroke-width: 4;
+  opacity: 1;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.22));
+}
+
+.overall-history-line.dimmed {
+  opacity: 0.18;
 }
 
 .overall-history-point {
   stroke: #16111f;
   stroke-width: 2;
+  transition:
+    r 0.18s ease,
+    stroke-width 0.18s ease,
+    filter 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.overall-history-point.hovered {
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.32));
+}
+
+.overall-history-hit-point {
+  fill: transparent;
+  cursor: crosshair;
+  pointer-events: all;
+}
+
+.overall-history-hit-point:focus {
+  outline: none;
+}
+
+.overall-history-tooltip {
+  filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.42));
+}
+
+.overall-history-tooltip-box {
+  fill: rgba(24, 20, 35, 0.96);
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+}
+
+.overall-history-tooltip-swatch {
+  stroke: rgba(255, 255, 255, 0.48);
+  stroke-width: 1.5;
+}
+
+.overall-history-tooltip-name {
+  fill: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.overall-history-tooltip-meta {
+  fill: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.overall-history-tooltip-overall {
+  fill: var(--color-text-primary);
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.overall-history-tooltip-delta {
+  fill: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.overall-history-tooltip-delta.positive {
+  fill: #34d399;
+}
+
+.overall-history-tooltip-delta.negative {
+  fill: #fb7185;
 }
 
 .overall-history-legend {
