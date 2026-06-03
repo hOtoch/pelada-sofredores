@@ -598,6 +598,23 @@ export default function App() {
           setGeneratedTeams(derivedTeams);
           setAverageOverallGap(calculateAverageOverallGap(derivedTeams));
           setMatchRatingState(ratingState);
+          if (
+            ratingState?.ratingsFinalizedAt &&
+            currentMatch.ratingsFinalizedAt !== ratingState.ratingsFinalizedAt
+          ) {
+            setCurrentMatch((prev) =>
+              prev?.id === currentMatch.id
+                ? { ...prev, ratingsFinalizedAt: ratingState.ratingsFinalizedAt }
+                : prev,
+            );
+            setMatches((prev) =>
+              prev.map((entry) =>
+                entry.id === currentMatch.id
+                  ? { ...entry, ratingsFinalizedAt: ratingState.ratingsFinalizedAt }
+                  : entry,
+              ),
+            );
+          }
         }
       } catch (error) {
         if (!isCancelled) {

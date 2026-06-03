@@ -495,7 +495,14 @@ export function PreMatchPage({
       }),
     [matches],
   );
-  const shouldShowOverallHistory = activeSection === "ratings" && !hasOpenRatingWindow;
+  const selectedRatingWindowIsClosed = Boolean(
+    activeSection === "ratings" &&
+      match?.status === "ARCHIVED" &&
+      ratingState?.ratingsFinalizedAt &&
+      ratingItems.length === 0,
+  );
+  const shouldShowOverallHistory =
+    activeSection === "ratings" && (!hasOpenRatingWindow || selectedRatingWindowIsClosed);
 
   useEffect(() => {
     setResultSummary(match?.resultSummary ?? "");
