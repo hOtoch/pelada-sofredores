@@ -286,6 +286,8 @@ class ApiFlowTests(APITestCase):
             attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
             overall=66,
         )
+        self.players[0].overall = 88
+        self.players[0].save(update_fields=["overall"])
 
         admin_response = self.client.get("/api/matches/overall-history/")
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
@@ -297,6 +299,8 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(len(admin_response.data["matches"]), 1)
         history_points = admin_response.data["matches"][0]["points"]
         self.assertIn(str(self.players[0].id), [item["player_id"] for item in history_points])
+        player_point = next(item for item in history_points if item["player_id"] == str(self.players[0].id))
+        self.assertEqual(player_point["overall"], 88)
         self.assertNotIn("Convidado Historico", [item["display_name"] for item in history_points])
 
     def test_admin_can_create_match_via_api(self) -> None:

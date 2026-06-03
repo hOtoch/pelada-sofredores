@@ -195,6 +195,7 @@ function OverallHistoryPanel({
   overallHistory?: OverallHistorySnapshot | null;
 }) {
   const [hoveredPoint, setHoveredPoint] = useState<OverallHistoryHoverPoint | null>(null);
+  const [hoveredLegendPlayerId, setHoveredLegendPlayerId] = useState<string | null>(null);
   const chartData = useMemo(() => {
     const matches = [...(overallHistory?.matches ?? [])].sort((left, right) =>
       left.scheduledAt.localeCompare(right.scheduledAt),
@@ -215,7 +216,6 @@ function OverallHistoryPanel({
             overallByMatchAndPlayer.get(`${historyMatch.matchId}:${player.playerId}`) ?? null,
         );
         const presentValues = values.filter((value): value is number => value !== null);
-        const firstOverall = presentValues[0] ?? null;
         const lastOverall = presentValues[presentValues.length - 1] ?? null;
 
         return {
@@ -223,12 +223,7 @@ function OverallHistoryPanel({
           color: overallHistoryPalette[playerIndex % overallHistoryPalette.length],
           values,
           presentValues,
-          firstOverall,
           lastOverall,
-          delta:
-            firstOverall === null || lastOverall === null
-              ? null
-              : lastOverall - firstOverall,
         };
       })
       .filter((player) => player.presentValues.length > 0);
@@ -292,6 +287,7 @@ function OverallHistoryPanel({
         height - margin.bottom - tooltipHeight,
       )
     : 0;
+  const activePlayerId = hoveredPoint?.playerId ?? hoveredLegendPlayerId;
 
   return (
     <div className="overall-history-panel glass-card">
@@ -384,8 +380,8 @@ function OverallHistoryPanel({
                   overall === null ? null : { x: xForIndex(index), y: yForOverall(overall) },
                 );
                 const path = buildOverallHistoryPath(points);
-                const isHoveredSeries = hoveredPoint?.playerId === player.playerId;
-                const isDimmedSeries = Boolean(hoveredPoint && !isHoveredSeries);
+                const isHoveredSeries = activePlayerId === player.playerId;
+                const isDimmedSeries = Boolean(activePlayerId && !isHoveredSeries);
 
                 return (
                   <g key={player.playerId}>
@@ -509,7 +505,17 @@ function OverallHistoryPanel({
 
           <div className="overall-history-legend" aria-label="Mensalistas no histórico">
             {series.map((player) => (
-              <div key={player.playerId} className="overall-history-legend-item">
+              <div
+                key={player.playerId}
+                className={`overall-history-legend-item ${
+                  activePlayerId === player.playerId ? "active" : activePlayerId ? "dimmed" : ""
+                }`}
+                tabIndex={0}
+                onPointerEnter={() => setHoveredLegendPlayerId(player.playerId)}
+                onPointerLeave={() => setHoveredLegendPlayerId(null)}
+                onFocus={() => setHoveredLegendPlayerId(player.playerId)}
+                onBlur={() => setHoveredLegendPlayerId(null)}
+              >
                 <span
                   className="overall-history-swatch"
                   style={{ backgroundColor: player.color }}
@@ -517,15 +523,6 @@ function OverallHistoryPanel({
                 />
                 <strong>{player.displayName}</strong>
                 <span>{player.lastOverall} OVR</span>
-                {player.delta !== null ? (
-                  <span
-                    className={`overall-history-delta ${
-                      player.delta > 0 ? "positive" : player.delta < 0 ? "negative" : ""
-                    }`}
-                  >
-                    {player.delta > 0 ? `+${player.delta}` : player.delta}
-                  </span>
-                ) : null}
               </div>
             ))}
           </div>

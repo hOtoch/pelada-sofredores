@@ -1572,13 +1572,33 @@ button {
 .overall-history-legend-item {
   min-width: 0;
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto auto;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.55rem 0;
+  padding: 0.55rem 0.45rem;
+  border-radius: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--color-text-secondary);
+  cursor: default;
   font-size: 0.92rem;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.overall-history-legend-item:hover,
+.overall-history-legend-item:focus,
+.overall-history-legend-item.active {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.overall-history-legend-item.dimmed {
+  opacity: 0.42;
 }
 
 .overall-history-legend-item strong {
@@ -1594,19 +1614,6 @@ button {
   height: 10px;
   border-radius: 999px;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
-}
-
-.overall-history-delta {
-  font-weight: 700;
-  color: var(--color-text-secondary);
-}
-
-.overall-history-delta.positive {
-  color: #34d399;
-}
-
-.overall-history-delta.negative {
-  color: #fb7185;
 }
 
 .rating-card-grid {

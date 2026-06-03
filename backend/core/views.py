@@ -486,7 +486,7 @@ class MatchViewSet(viewsets.ModelViewSet):
             for player in member_players
         ]
         member_player_ids = [player.id for player in member_players]
-        entries = (
+        entries = list(
             MatchAttendance.objects.select_related("match", "player")
             .filter(
                 match__status__in=FINAL_MATCH_STATUSES,
@@ -496,6 +496,17 @@ class MatchViewSet(viewsets.ModelViewSet):
             )
             .order_by("match__scheduled_at", "display_name")
         )
+        entries_by_player_id = {}
+        for entry in entries:
+            entries_by_player_id.setdefault(entry.player_id, []).append(entry)
+
+        overall_after_match_by_attendance_id = {}
+        for player_entries in entries_by_player_id.values():
+            for index, entry in enumerate(player_entries):
+                next_entry = player_entries[index + 1] if index + 1 < len(player_entries) else None
+                overall_after_match_by_attendance_id[entry.id] = (
+                    next_entry.overall if next_entry else entry.player.overall
+                )
 
         matches_by_id = {}
         for entry in entries:
@@ -512,7 +523,7 @@ class MatchViewSet(viewsets.ModelViewSet):
                 {
                     "player_id": str(entry.player_id),
                     "display_name": entry.player.nickname or entry.player.full_name,
-                    "overall": entry.overall,
+                    "overall": overall_after_match_by_attendance_id[entry.id],
                 }
             )
 
