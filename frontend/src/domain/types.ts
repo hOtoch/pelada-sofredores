@@ -157,6 +157,17 @@ export interface MatchPlayerRatingItem {
   ratingCount: number;
 }
 
+export interface MatchPlayerOverallSummary {
+  attendanceId: string;
+  playerId: string;
+  displayName: string;
+  previousOverall: number;
+  currentOverall: number;
+  delta: number;
+  averageScore?: number | null;
+  ratingCount: number;
+}
+
 export interface MatchPlayerRatingState {
   matchId: string;
   canRate: boolean;
@@ -166,6 +177,7 @@ export interface MatchPlayerRatingState {
   ratingsFinalizedAt?: ISODateTimeString | null;
   items: MatchPlayerRatingItem[];
   log: MatchPlayerRatingLogEntry[];
+  overallSummary: MatchPlayerOverallSummary[];
 }
 
 export interface MatchPlayerRatingInput {

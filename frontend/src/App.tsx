@@ -52,6 +52,7 @@ import {
   deleteAttendance as deleteAttendanceRequest,
   patchMatchStatus as patchMatchStatusRequest,
   patchMatchResult as patchMatchResultRequest,
+  finalizeMatchRatings,
   generateTeams,
   getCurrentMatch,
   getFinancialSummary,
@@ -306,6 +307,7 @@ export default function App() {
   const [isClearingTeams, setIsClearingTeams] = useState(false);
   const [isSubmittingMatch, setIsSubmittingMatch] = useState(false);
   const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
+  const [isFinalizingRatings, setIsFinalizingRatings] = useState(false);
   const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
   const [isSubmittingRoster, setIsSubmittingRoster] = useState(false);
   const [isSubmittingAccount, setIsSubmittingAccount] = useState(false);
@@ -733,6 +735,35 @@ export default function App() {
       throw error;
     } finally {
       setIsSubmittingRatings(false);
+    }
+  };
+
+  const handleFinalizeRatings = async () => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsFinalizingRatings(true);
+    setScreenError(undefined);
+
+    try {
+      const nextRatingState = await finalizeMatchRatings(token, currentMatch.id);
+      const [nextPlayers, matchData, nextAttendance] = await Promise.all([
+        listPlayers(token),
+        fetchMatchData(token, currentMatch.id),
+        listAttendance(token, currentMatch.id),
+      ]);
+      setMatchRatingState(nextRatingState);
+      setPlayers(nextPlayers);
+      setMatches(matchData.matches);
+      setCurrentMatch(matchData.selectedMatch);
+      setAttendance(nextAttendance);
+      reportSuccess("Janela de notas finalizada e overalls atualizados.");
+    } catch (error) {
+      reportError("Falha ao finalizar a janela de notas.", error);
+      throw error;
+    } finally {
+      setIsFinalizingRatings(false);
     }
   };
 
@@ -1567,6 +1598,7 @@ export default function App() {
                 isGeneratingTeams={isGeneratingTeams}
                 isClearingTeams={isClearingTeams}
                 isSubmittingRatings={isSubmittingRatings}
+                isFinalizingRatings={isFinalizingRatings}
                 isSubmittingMatch={isSubmittingMatch}
                 isSubmittingAttendance={isSubmittingAttendance}
                 canManageAttendance={isAdmin}
@@ -1587,6 +1619,7 @@ export default function App() {
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
+                onFinalizeRatings={() => handleFinalizeRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
               />
             )}
@@ -1606,6 +1639,7 @@ export default function App() {
                 isGeneratingTeams={isGeneratingTeams}
                 isClearingTeams={isClearingTeams}
                 isSubmittingRatings={isSubmittingRatings}
+                isFinalizingRatings={isFinalizingRatings}
                 isSubmittingMatch={isSubmittingMatch}
                 isSubmittingAttendance={isSubmittingAttendance}
                 canManageAttendance={isAdmin}
@@ -1626,6 +1660,7 @@ export default function App() {
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
+                onFinalizeRatings={() => handleFinalizeRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
               />
             )}

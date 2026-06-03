@@ -349,6 +349,17 @@ class MatchPlayerRatingLogSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
 
+class MatchPlayerOverallSummarySerializer(serializers.Serializer):
+    attendance_id = serializers.UUIDField()
+    player_id = serializers.UUIDField()
+    display_name = serializers.CharField()
+    previous_overall = serializers.IntegerField()
+    current_overall = serializers.IntegerField()
+    delta = serializers.IntegerField()
+    average_score = serializers.DecimalField(max_digits=4, decimal_places=2, allow_null=True)
+    rating_count = serializers.IntegerField()
+
+
 class MatchPlayerRatingStateSerializer(serializers.Serializer):
     match_id = serializers.UUIDField()
     can_rate = serializers.BooleanField()
@@ -358,6 +369,7 @@ class MatchPlayerRatingStateSerializer(serializers.Serializer):
     ratings_finalized_at = serializers.DateTimeField(allow_null=True)
     items = MatchPlayerRatingItemSerializer(many=True)
     log = MatchPlayerRatingLogSerializer(many=True)
+    overall_summary = MatchPlayerOverallSummarySerializer(many=True)
 
 
 class MatchPlayerRatingInputItemSerializer(serializers.Serializer):

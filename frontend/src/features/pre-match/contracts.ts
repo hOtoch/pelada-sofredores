@@ -58,6 +58,7 @@ export interface PreMatchPageProps {
   isGeneratingTeams: boolean;
   isClearingTeams: boolean;
   isSubmittingRatings: boolean;
+  isFinalizingRatings: boolean;
   isSubmittingAttendance: boolean;
   isSubmittingMatch: boolean;
   canManageAttendance: boolean;
@@ -74,5 +75,6 @@ export interface PreMatchPageProps {
   onGenerateTeams: (teamCount: number) => Promise<void> | void;
   onClearGeneratedTeams: () => Promise<void> | void;
   ratingState?: MatchPlayerRatingState | null;
+  onFinalizeRatings?: () => Promise<void> | void;
   onSubmitPlayerRatings?: (ratings: MatchPlayerRatingInput[]) => Promise<void> | void;
 }

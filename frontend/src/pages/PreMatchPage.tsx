@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
-import type { AttendanceStatus, MatchPlayerRatingInput, MatchStatus } from "../domain/types";
+import type {
+  AttendanceStatus,
+  MatchPlayerOverallSummary,
+  MatchPlayerRatingInput,
+  MatchStatus,
+} from "../domain/types";
 import type {
   GuestFormValues,
   MatchFormValues,
@@ -84,6 +89,51 @@ const downloadTextFile = (filename: string, content: string, mimeType: string) =
   URL.revokeObjectURL(href);
 };
 
+const downloadCanvasImage = (filename: string, canvas: HTMLCanvasElement) => {
+  const link = document.createElement("a");
+  link.href = canvas.toDataURL("image/png");
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+};
+
+const drawOverallDeltaIcon = (
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  delta: number,
+) => {
+  if (delta > 0) {
+    context.fillStyle = "#34d399";
+    context.beginPath();
+    context.moveTo(centerX, centerY - 7);
+    context.lineTo(centerX - 7, centerY + 7);
+    context.lineTo(centerX + 7, centerY + 7);
+    context.closePath();
+    context.fill();
+    return;
+  }
+
+  if (delta < 0) {
+    context.fillStyle = "#fb7185";
+    context.beginPath();
+    context.moveTo(centerX, centerY + 7);
+    context.lineTo(centerX - 7, centerY - 7);
+    context.lineTo(centerX + 7, centerY - 7);
+    context.closePath();
+    context.fill();
+    return;
+  }
+
+  context.strokeStyle = "#94a3b8";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(centerX - 7, centerY);
+  context.lineTo(centerX + 7, centerY);
+  context.stroke();
+};
+
 export function PreMatchPage({
   matches,
   match,
@@ -95,6 +145,7 @@ export function PreMatchPage({
   isGeneratingTeams,
   isClearingTeams,
   isSubmittingRatings,
+  isFinalizingRatings,
   isLoading,
   isSubmittingAttendance,
   isSubmittingMatch,
@@ -112,6 +163,7 @@ export function PreMatchPage({
   onGenerateTeams,
   onClearGeneratedTeams,
   ratingState,
+  onFinalizeRatings,
   onSubmitPlayerRatings,
 }: PreMatchPageProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
@@ -128,6 +180,15 @@ export function PreMatchPage({
   const canEditAttendance = canManageAttendance && isEditableMatch;
   const canRunGeneration = canManageMatch && isEditableMatch && confirmedCount >= 2;
   const canClearGeneratedTeams = canRunGeneration && generatedTeams.length > 0;
+  const overallSummary = ratingState?.overallSummary ?? [];
+  const canFinalizeRatings = Boolean(
+    canManageMatch &&
+      match?.status === "ARCHIVED" &&
+      ratingState &&
+      !ratingState.ratingsFinalizedAt &&
+      onFinalizeRatings,
+  );
+  const canExportOverallImage = Boolean(ratingState?.ratingsFinalizedAt && overallSummary.length > 0);
   const ratingItems = ratingState?.items ?? [];
   const completedRatingCount = ratingItems.filter((item) => Boolean(ratingDraft[item.attendanceId])).length;
   const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
@@ -429,6 +490,129 @@ export function PreMatchPage({
     ].join("\n");
 
     downloadTextFile(`${baseName}.txt`, textContent, "text/plain;charset=utf-8");
+  };
+
+  const handleFinalizeRatings = async () => {
+    if (!onFinalizeRatings) {
+      return;
+    }
+
+    try {
+      await onFinalizeRatings();
+    } catch {
+      // Parent banner already surfaces the failure.
+    }
+  };
+
+  const handleExportOverallImage = () => {
+    if (!match || !ratingState?.ratingsFinalizedAt || overallSummary.length === 0) {
+      return;
+    }
+
+    const sortedSummary: MatchPlayerOverallSummary[] = [...overallSummary];
+    const scale = Math.max(window.devicePixelRatio || 1, 1);
+    const width = 900;
+    const rowHeight = 58;
+    const tableTop = 230;
+    const height = tableTop + sortedSummary.length * rowHeight + 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.scale(scale, scale);
+    const background = context.createLinearGradient(0, 0, width, height);
+    background.addColorStop(0, "#08070d");
+    background.addColorStop(1, "#191125");
+    context.fillStyle = background;
+    context.fillRect(0, 0, width, height);
+
+    context.fillStyle = "#f8f7ff";
+    context.font = "700 34px Arial";
+    context.fillText("RESUMO DOS OVERALLS", 42, 58);
+
+    context.fillStyle = "#c4b5fd";
+    context.font = "500 18px Arial";
+    context.fillText(`Pelada de ${formatDateTime(match.scheduledAt)}`, 42, 90);
+    context.fillStyle = "#a8a29e";
+    context.font = "400 16px Arial";
+    context.fillText(`Local: ${match.location || "A definir"}`, 42, 118);
+    context.fillText(`Finalizadas em ${formatDateTime(ratingState.ratingsFinalizedAt)}`, 42, 144);
+
+    const increasedCount = sortedSummary.filter((item) => item.delta > 0).length;
+    const decreasedCount = sortedSummary.filter((item) => item.delta < 0).length;
+    const sameCount = sortedSummary.length - increasedCount - decreasedCount;
+    const drawPill = (label: string, value: number, x: number, color: string) => {
+      context.fillStyle = "rgba(255,255,255,0.07)";
+      context.fillRect(x, 166, 150, 36);
+      context.fillStyle = color;
+      context.font = "700 18px Arial";
+      context.fillText(String(value), x + 18, 190);
+      context.fillStyle = "#e7e5e4";
+      context.font = "500 14px Arial";
+      context.fillText(label, x + 48, 190);
+    };
+    drawPill("subiram", increasedCount, 42, "#34d399");
+    drawPill("cairam", decreasedCount, 208, "#fb7185");
+    drawPill("iguais", sameCount, 374, "#94a3b8");
+
+    context.fillStyle = "rgba(255,255,255,0.09)";
+    context.fillRect(42, tableTop - 36, width - 84, 36);
+    context.fillStyle = "#ddd6fe";
+    context.font = "700 14px Arial";
+    context.fillText("Jogador", 58, tableTop - 13);
+    context.fillText("Antes", 540, tableTop - 13);
+    context.fillText("Agora", 650, tableTop - 13);
+    context.fillText("Variacao", 760, tableTop - 13);
+
+    const fitText = (text: string, x: number, y: number, maxWidth: number) => {
+      if (context.measureText(text).width <= maxWidth) {
+        context.fillText(text, x, y);
+        return;
+      }
+
+      let clipped = text;
+      while (clipped.length > 3 && context.measureText(`${clipped}...`).width > maxWidth) {
+        clipped = clipped.slice(0, -1);
+      }
+      context.fillText(`${clipped}...`, x, y);
+    };
+
+    sortedSummary.forEach((item, index) => {
+      const rowY = tableTop + index * rowHeight;
+      context.fillStyle = index % 2 === 0 ? "rgba(255,255,255,0.045)" : "rgba(255,255,255,0.025)";
+      context.fillRect(42, rowY, width - 84, rowHeight - 6);
+
+      context.fillStyle = "#f5f3ff";
+      context.font = "700 17px Arial";
+      fitText(item.displayName, 58, rowY + 22, 400);
+      context.fillStyle = "#a8a29e";
+      context.font = "400 13px Arial";
+      const scoreLabel =
+        item.averageScore == null
+          ? "Sem votos"
+          : `Nota media ${item.averageScore.toFixed(1)} (${item.ratingCount} voto${item.ratingCount === 1 ? "" : "s"})`;
+      fitText(scoreLabel, 58, rowY + 43, 400);
+
+      context.fillStyle = "#e7e5e4";
+      context.font = "700 18px Arial";
+      context.fillText(String(item.previousOverall), 552, rowY + 34);
+      context.fillText(String(item.currentOverall), 662, rowY + 34);
+
+      drawOverallDeltaIcon(context, 774, rowY + 28, item.delta);
+      context.fillStyle = item.delta > 0 ? "#34d399" : item.delta < 0 ? "#fb7185" : "#94a3b8";
+      context.font = "700 18px Arial";
+      context.fillText(item.delta > 0 ? `+${item.delta}` : String(item.delta), 798, rowY + 34);
+    });
+
+    context.fillStyle = "#78716c";
+    context.font = "400 13px Arial";
+    context.fillText("Gerado pelo Peladinhas Sofredores", 42, height - 26);
+
+    downloadCanvasImage(`overalls-${match.scheduledAt.slice(0, 10)}.png`, canvas);
   };
 
   return (
@@ -873,11 +1057,31 @@ export function PreMatchPage({
                     : "A votação abre por 24 horas após o arquivamento da pelada."}
               </small>
             </div>
-            <div className="rating-arena-score">
-              <span>
-                {completedRatingCount}/{ratingItems.length}
-              </span>
-              <small>cards completos</small>
+            <div className="rating-arena-actions">
+              <div className="rating-arena-score">
+                <span>
+                  {completedRatingCount}/{ratingItems.length}
+                </span>
+                <small>cards completos</small>
+              </div>
+              {canManageMatch && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={!canFinalizeRatings || isFinalizingRatings}
+                  onClick={() => void handleFinalizeRatings()}
+                >
+                  {isFinalizingRatings ? "Finalizando..." : "Finalizar janela"}
+                </button>
+              )}
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={!canExportOverallImage}
+                onClick={handleExportOverallImage}
+              >
+                Exportar imagem
+              </button>
             </div>
           </div>
 
@@ -886,7 +1090,11 @@ export function PreMatchPage({
           ) : !ratingState ? (
             <p className="empty-state">Notas indisponíveis para esta pelada.</p>
           ) : ratingItems.length === 0 && ratingState.log.length === 0 ? (
-            <p className="empty-state">{ratingState.lockedReason || "A tela de notas está vazia para esta pelada."}</p>
+            <p className="empty-state">
+              {ratingState.ratingsFinalizedAt && overallSummary.length > 0
+                ? "Janela finalizada. Exporte a imagem para compartilhar os overalls atualizados."
+                : ratingState.lockedReason || "A tela de notas está vazia para esta pelada."}
+            </p>
           ) : (
             <>
               {ratingItems.length > 0 && (

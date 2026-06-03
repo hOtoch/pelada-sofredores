@@ -568,8 +568,49 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(response.data["items"], [])
         self.assertEqual(response.data["log"], [])
         self.assertIsNotNone(response.data["ratings_finalized_at"])
+        summary_entry = next(
+            item for item in response.data["overall_summary"] if item["player_id"] == str(self.players[1].id)
+        )
+        self.assertEqual(summary_entry["previous_overall"], original_overall)
         self.players[1].refresh_from_db()
         self.assertGreater(self.players[1].overall, original_overall)
+        self.assertEqual(summary_entry["current_overall"], self.players[1].overall)
+        self.assertGreater(summary_entry["delta"], 0)
+
+    def test_admin_can_finalize_rating_window_manually(self) -> None:
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=self.players[1])
+        original_overall = self.players[1].overall
+        MatchPlayerRating.objects.create(
+            match=self.match,
+            rater_user=self.common_user,
+            rated_attendance=target_attendance,
+            rated_player=self.players[1],
+            score=10,
+        )
+
+        response = self.client.post(f"/api/matches/{self.match.id}/finalize-ratings/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["can_rate"])
+        self.assertIsNotNone(response.data["ratings_finalized_at"])
+        summary_entry = next(
+            item for item in response.data["overall_summary"] if item["player_id"] == str(self.players[1].id)
+        )
+        self.players[1].refresh_from_db()
+        self.assertEqual(summary_entry["previous_overall"], original_overall)
+        self.assertEqual(summary_entry["current_overall"], self.players[1].overall)
+        self.assertGreater(summary_entry["delta"], 0)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+        locked_response = self.client.post(
+            f"/api/matches/{self.match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(target_attendance.id), "score": 1}]},
+            format="json",
+        )
+        self.assertEqual(locked_response.status_code, 400)
 
     def test_admin_can_create_transaction_via_api(self) -> None:
         response = self.client.post(

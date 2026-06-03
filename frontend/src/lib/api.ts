@@ -161,6 +161,17 @@ type RawMatchPlayerRatingItem = {
   rating_count: number;
 };
 
+type RawMatchPlayerOverallSummary = {
+  attendance_id: string;
+  player_id: string;
+  display_name: string;
+  previous_overall: number;
+  current_overall: number;
+  delta: number;
+  average_score: number | string | null;
+  rating_count: number;
+};
+
 type RawMatchPlayerRatingState = {
   match_id: string;
   can_rate: boolean;
@@ -170,6 +181,7 @@ type RawMatchPlayerRatingState = {
   ratings_finalized_at: string | null;
   items: RawMatchPlayerRatingItem[];
   log: RawMatchPlayerRatingLogEntry[];
+  overall_summary: RawMatchPlayerOverallSummary[];
 };
 
 type RawMatchPlayerRatingLogEntry = {
@@ -563,6 +575,16 @@ function mapMatchPlayerRatingState(raw: RawMatchPlayerRatingState): MatchPlayerR
       createdAt: entry.created_at,
       updatedAt: entry.updated_at,
     })),
+    overallSummary: (raw.overall_summary ?? []).map((item) => ({
+      attendanceId: item.attendance_id,
+      playerId: item.player_id,
+      displayName: item.display_name,
+      previousOverall: item.previous_overall,
+      currentOverall: item.current_overall,
+      delta: item.delta,
+      averageScore: item.average_score == null ? null : toNumber(item.average_score),
+      ratingCount: item.rating_count,
+    })),
   };
 }
 
@@ -951,6 +973,17 @@ export async function submitMatchPlayerRatings(
           score: rating.score,
         })),
       }),
+    },
+    token,
+  );
+  return mapMatchPlayerRatingState(data);
+}
+
+export async function finalizeMatchRatings(token: string, matchId: string) {
+  const data = await request<RawMatchPlayerRatingState>(
+    `/matches/${matchId}/finalize-ratings/`,
+    {
+      method: "POST",
     },
     token,
   );

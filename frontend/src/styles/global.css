@@ -1395,6 +1395,14 @@ button {
   position: relative;
 }
 
+.rating-arena-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .rating-arena-score {
   display: flex;
   flex-direction: column;

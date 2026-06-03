@@ -175,8 +175,12 @@ def is_rating_window_expired(match: Match) -> bool:
     return bool(window_closes_at and timezone.now() >= window_closes_at)
 
 
-def finalize_match_ratings_if_due(match: Match) -> bool:
-    if match.status != Match.Status.ARCHIVED or match.ratings_finalized_at or not is_rating_window_expired(match):
+def finalize_match_ratings(match: Match, *, force: bool = False) -> bool:
+    if (
+        match.status != Match.Status.ARCHIVED
+        or match.ratings_finalized_at
+        or (not force and not is_rating_window_expired(match))
+    ):
         return False
 
     with transaction.atomic():
@@ -184,7 +188,7 @@ def finalize_match_ratings_if_due(match: Match) -> bool:
         if (
             locked_match.status != Match.Status.ARCHIVED
             or locked_match.ratings_finalized_at
-            or not is_rating_window_expired(locked_match)
+            or (not force and not is_rating_window_expired(locked_match))
         ):
             match.ratings_finalized_at = locked_match.ratings_finalized_at
             return False
@@ -201,6 +205,10 @@ def finalize_match_ratings_if_due(match: Match) -> bool:
         locked_match.save(update_fields=["ratings_finalized_at", "updated_at"])
         match.ratings_finalized_at = locked_match.ratings_finalized_at
         return True
+
+
+def finalize_match_ratings_if_due(match: Match) -> bool:
+    return finalize_match_ratings(match, force=False)
 
 
 def finalize_due_match_ratings() -> None:
@@ -404,17 +412,58 @@ class MatchViewSet(viewsets.ModelViewSet):
         if match.status != Match.Status.ARCHIVED:
             return "Avaliações liberadas após o arquivamento da pelada."
 
+        if match.ratings_finalized_at:
+            return "A janela de notas desta pelada foi encerrada."
+
         if is_rating_window_expired(match):
             return "A janela de notas desta pelada foi encerrada."
 
         return ""
 
+    def _build_rating_overall_summary(self, match, rating_stats):
+        summary = []
+        participants = (
+            match.attendance_entries.select_related("player")
+            .filter(
+                attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+                player__isnull=False,
+            )
+            .order_by("display_name")
+        )
+        for entry in participants:
+            stats = rating_stats.get(entry.id, {})
+            current_overall = entry.player.overall
+            summary.append(
+                {
+                    "attendance_id": entry.id,
+                    "player_id": entry.player_id,
+                    "display_name": entry.display_name,
+                    "previous_overall": entry.overall,
+                    "current_overall": current_overall,
+                    "delta": current_overall - entry.overall,
+                    "average_score": stats.get("average_score"),
+                    "rating_count": stats.get("rating_count", 0),
+                }
+            )
+        return summary
+
     def _build_rating_state(self, match):
         finalize_match_ratings_if_due(match)
+        match.refresh_from_db(fields=["ratings_finalized_at"])
+        window_closes_at = get_rating_window_closes_at(match)
+        rating_stats = {
+            row["rated_attendance_id"]: row
+            for row in MatchPlayerRating.objects.filter(match=match)
+            .values("rated_attendance_id")
+            .annotate(average_score=Avg("score"), rating_count=Count("id"))
+        }
+        overall_summary = self._build_rating_overall_summary(match, rating_stats)
         locked_reason = self._get_rating_lock_reason(match)
         can_rate = bool(getattr(self.request.user, "role", None) != Role.ADMIN and not locked_reason)
-        window_closes_at = get_rating_window_closes_at(match)
-        is_window_closed = match.status == Match.Status.ARCHIVED and is_rating_window_expired(match)
+        is_window_closed = bool(
+            match.status == Match.Status.ARCHIVED
+            and (match.ratings_finalized_at or is_rating_window_expired(match))
+        )
 
         if is_window_closed:
             payload = {
@@ -426,6 +475,7 @@ class MatchViewSet(viewsets.ModelViewSet):
                 "ratings_finalized_at": match.ratings_finalized_at,
                 "items": [],
                 "log": [],
+                "overall_summary": overall_summary,
             }
             return MatchPlayerRatingStateSerializer(payload).data
 
@@ -441,13 +491,6 @@ class MatchViewSet(viewsets.ModelViewSet):
         rating_by_attendance = {
             rating.rated_attendance_id: rating
             for rating in MatchPlayerRating.objects.filter(match=match, rater_user=self.request.user)
-        }
-
-        rating_stats = {
-            row["rated_attendance_id"]: row
-            for row in MatchPlayerRating.objects.filter(match=match)
-            .values("rated_attendance_id")
-            .annotate(average_score=Avg("score"), rating_count=Count("id"))
         }
 
         rating_log = []
@@ -508,6 +551,7 @@ class MatchViewSet(viewsets.ModelViewSet):
             "ratings_finalized_at": match.ratings_finalized_at,
             "items": items,
             "log": rating_log,
+            "overall_summary": overall_summary,
         }
         return MatchPlayerRatingStateSerializer(payload).data
 
@@ -555,6 +599,15 @@ class MatchViewSet(viewsets.ModelViewSet):
                     },
                 )
 
+        return Response(self._build_rating_state(match))
+
+    @action(detail=True, methods=["post"], url_path="finalize-ratings")
+    def finalize_ratings(self, request, pk=None):
+        match = self.get_object()
+        if match.status != Match.Status.ARCHIVED:
+            raise ValidationError({"detail": "Arquive a pelada antes de finalizar as notas."})
+
+        finalize_match_ratings(match, force=True)
         return Response(self._build_rating_state(match))
 
 
