@@ -105,6 +105,7 @@ export interface MatchSummary {
   resultRecordedAt?: ISODateTimeString | null;
   ratingsFinalizedAt?: ISODateTimeString | null;
   notes?: string;
+  updatedAt?: ISODateTimeString;
 }
 
 export interface AttendanceEntry {

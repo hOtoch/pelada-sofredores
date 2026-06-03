@@ -168,6 +168,11 @@ const buildOverallHistoryPath = (points: Array<{ x: number; y: number } | null>)
   return path.trim();
 };
 
+const getRatingWindowStartedAt = (match: { archivedAt?: string | null; updatedAt?: string; scheduledAt: string }) => {
+  const timestamp = Date.parse(match.archivedAt ?? match.updatedAt ?? match.scheduledAt);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
 function OverallHistoryPanel({
   overallHistory,
 }: {
@@ -485,11 +490,8 @@ export function PreMatchPage({
           return false;
         }
 
-        if (!entry.archivedAt) {
-          return true;
-        }
-
-        return Date.now() < new Date(entry.archivedAt).getTime() + ratingWindowDurationMs;
+        const startedAt = getRatingWindowStartedAt(entry);
+        return startedAt !== null && Date.now() < startedAt + ratingWindowDurationMs;
       }),
     [matches],
   );

@@ -102,6 +102,7 @@ type RawMatch = {
   result_recorded_at: string | null;
   ratings_finalized_at: string | null;
   notes: string;
+  updated_at: string;
 };
 
 type RawAttendance = {
@@ -454,6 +455,7 @@ function mapMatch(raw: RawMatch): MatchSummary {
     resultRecordedAt: raw.result_recorded_at,
     ratingsFinalizedAt: raw.ratings_finalized_at,
     notes: raw.notes,
+    updatedAt: raw.updated_at,
   };
 }
 
