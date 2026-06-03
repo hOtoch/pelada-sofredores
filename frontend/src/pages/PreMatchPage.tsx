@@ -235,11 +235,14 @@ function OverallHistoryPanel({
 
     const rawMin = Math.min(...allValues);
     const rawMax = Math.max(...allValues);
-    let yMin = Math.max(0, Math.floor((rawMin - 4) / 5) * 5);
-    let yMax = Math.min(99, Math.ceil((rawMax + 4) / 5) * 5);
+    const valueRange = rawMax - rawMin;
+    const yPadding = valueRange <= 10 ? 2 : 3;
+    const minimumRange = valueRange <= 10 ? 8 : 14;
+    let yMin = Math.max(0, Math.floor(rawMin - yPadding));
+    let yMax = Math.min(99, Math.ceil(rawMax + yPadding));
 
-    if (yMax - yMin < 12) {
-      const padding = Math.ceil((12 - (yMax - yMin)) / 2);
+    if (yMax - yMin < minimumRange) {
+      const padding = Math.ceil((minimumRange - (yMax - yMin)) / 2);
       yMin = Math.max(0, yMin - padding);
       yMax = Math.min(99, yMax + padding);
     }
@@ -256,8 +259,8 @@ function OverallHistoryPanel({
   }, [overallHistory]);
 
   const width = 960;
-  const height = 380;
-  const margin = { top: 26, right: 28, bottom: 58, left: 58 };
+  const height = 520;
+  const margin = { top: 34, right: 28, bottom: 68, left: 58 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const { matches, series, yMin, yMax, yTicks } = chartData;
