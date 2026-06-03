@@ -612,6 +612,224 @@ class ApiFlowTests(APITestCase):
         )
         self.assertEqual(locked_response.status_code, 400)
 
+    def test_rating_finalization_uses_only_match_average_with_25_percent_weight(self) -> None:
+        target_player = self.players[1]
+        target_player.overall = 70
+        target_player.save(update_fields=["overall"])
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=target_player)
+        target_attendance.overall = 70
+        target_attendance.save(update_fields=["overall"])
+
+        old_match = Match.objects.create(
+            scheduled_at=timezone.now() - timedelta(days=7),
+            status=Match.Status.ARCHIVED,
+            archived_at=timezone.now() - timedelta(days=6),
+            expected_team_count=2,
+            created_by=self.user,
+            ratings_finalized_at=timezone.now() - timedelta(days=5),
+        )
+        old_attendance = MatchAttendance.objects.create(
+            match=old_match,
+            player=target_player,
+            display_name=target_player.full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            overall=70,
+        )
+        second_rater = User.objects.create_user(
+            username="comum-2",
+            email="comum-2@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        third_rater = User.objects.create_user(
+            username="comum-3",
+            email="comum-3@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        MatchPlayerRating.objects.create(
+            match=old_match,
+            rater_user=self.common_user,
+            rated_attendance=old_attendance,
+            rated_player=target_player,
+            score=1,
+        )
+        MatchPlayerRating.objects.create(
+            match=old_match,
+            rater_user=second_rater,
+            rated_attendance=old_attendance,
+            rated_player=target_player,
+            score=1,
+        )
+
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        for rater, score in (
+            (self.common_user, 7),
+            (second_rater, 7),
+            (third_rater, 8),
+        ):
+            MatchPlayerRating.objects.create(
+                match=self.match,
+                rater_user=rater,
+                rated_attendance=target_attendance,
+                rated_player=target_player,
+                score=score,
+            )
+
+        response = self.client.post(f"/api/matches/{self.match.id}/finalize-ratings/")
+
+        self.assertEqual(response.status_code, 200)
+        target_player.refresh_from_db()
+        self.assertEqual(target_player.overall, 71)
+        summary_entry = next(
+            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+        )
+        self.assertEqual(summary_entry["previous_overall"], 70)
+        self.assertEqual(summary_entry["current_overall"], 71)
+        self.assertEqual(summary_entry["delta"], 1)
+
+    def test_excellent_match_rating_can_move_high_overall_player_more_than_two_points(self) -> None:
+        target_player = self.players[1]
+        target_player.overall = 90
+        target_player.save(update_fields=["overall"])
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=target_player)
+        target_attendance.overall = 90
+        target_attendance.save(update_fields=["overall"])
+        second_rater = User.objects.create_user(
+            username="comum-2",
+            email="comum-2@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        third_rater = User.objects.create_user(
+            username="comum-3",
+            email="comum-3@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        for rater in (self.common_user, second_rater, third_rater):
+            MatchPlayerRating.objects.create(
+                match=self.match,
+                rater_user=rater,
+                rated_attendance=target_attendance,
+                rated_player=target_player,
+                score=10,
+            )
+
+        response = self.client.post(f"/api/matches/{self.match.id}/finalize-ratings/")
+
+        self.assertEqual(response.status_code, 200)
+        target_player.refresh_from_db()
+        self.assertEqual(target_player.overall, 95)
+        summary_entry = next(
+            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+        )
+        self.assertEqual(summary_entry["previous_overall"], 90)
+        self.assertEqual(summary_entry["current_overall"], 95)
+        self.assertEqual(summary_entry["delta"], 5)
+
+    def test_rating_performance_bonus_starts_at_eight_and_increases_at_nine(self) -> None:
+        first_player = self.players[1]
+        first_player.overall = 80
+        first_player.save(update_fields=["overall"])
+        first_attendance = MatchAttendance.objects.get(match=self.match, player=first_player)
+        first_attendance.overall = 80
+        first_attendance.save(update_fields=["overall"])
+        second_player = self.players[2]
+        second_player.overall = 80
+        second_player.save(update_fields=["overall"])
+        second_attendance = MatchAttendance.objects.get(match=self.match, player=second_player)
+        second_attendance.overall = 80
+        second_attendance.save(update_fields=["overall"])
+        second_rater = User.objects.create_user(
+            username="comum-2",
+            email="comum-2@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        third_rater = User.objects.create_user(
+            username="comum-3",
+            email="comum-3@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        for rater in (self.common_user, second_rater, third_rater):
+            MatchPlayerRating.objects.create(
+                match=self.match,
+                rater_user=rater,
+                rated_attendance=first_attendance,
+                rated_player=first_player,
+                score=8,
+            )
+            MatchPlayerRating.objects.create(
+                match=self.match,
+                rater_user=rater,
+                rated_attendance=second_attendance,
+                rated_player=second_player,
+                score=9,
+            )
+
+        response = self.client.post(f"/api/matches/{self.match.id}/finalize-ratings/")
+
+        self.assertEqual(response.status_code, 200)
+        first_player.refresh_from_db()
+        second_player.refresh_from_db()
+        self.assertEqual(first_player.overall, 81)
+        self.assertEqual(second_player.overall, 85)
+
+    def test_admin_can_recalculate_finalized_ratings_from_attendance_snapshot(self) -> None:
+        target_player = self.players[1]
+        target_player.overall = 92
+        target_player.save(update_fields=["overall"])
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=target_player)
+        target_attendance.overall = 90
+        target_attendance.save(update_fields=["overall"])
+        second_rater = User.objects.create_user(
+            username="comum-2",
+            email="comum-2@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        third_rater = User.objects.create_user(
+            username="comum-3",
+            email="comum-3@pelada.local",
+            password=self.password,
+            role=Role.COMMON,
+        )
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.ratings_finalized_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at", "ratings_finalized_at"])
+        for rater in (self.common_user, second_rater, third_rater):
+            MatchPlayerRating.objects.create(
+                match=self.match,
+                rater_user=rater,
+                rated_attendance=target_attendance,
+                rated_player=target_player,
+                score=10,
+            )
+
+        response = self.client.post(f"/api/matches/{self.match.id}/recalculate-ratings/")
+
+        self.assertEqual(response.status_code, 200)
+        target_player.refresh_from_db()
+        self.assertEqual(target_player.overall, 95)
+        summary_entry = next(
+            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+        )
+        self.assertEqual(summary_entry["previous_overall"], 90)
+        self.assertEqual(summary_entry["current_overall"], 95)
+        self.assertEqual(summary_entry["delta"], 5)
+
     def test_admin_can_create_transaction_via_api(self) -> None:
         response = self.client.post(
             "/api/transactions/",

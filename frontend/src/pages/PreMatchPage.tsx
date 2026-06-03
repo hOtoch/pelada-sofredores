@@ -146,6 +146,7 @@ export function PreMatchPage({
   isClearingTeams,
   isSubmittingRatings,
   isFinalizingRatings,
+  isRecalculatingRatings,
   isLoading,
   isSubmittingAttendance,
   isSubmittingMatch,
@@ -164,6 +165,7 @@ export function PreMatchPage({
   onClearGeneratedTeams,
   ratingState,
   onFinalizeRatings,
+  onRecalculateRatings,
   onSubmitPlayerRatings,
 }: PreMatchPageProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
@@ -187,6 +189,12 @@ export function PreMatchPage({
       ratingState &&
       !ratingState.ratingsFinalizedAt &&
       onFinalizeRatings,
+  );
+  const canRecalculateRatings = Boolean(
+    canManageMatch &&
+      ratingState?.ratingsFinalizedAt &&
+      overallSummary.some((item) => item.ratingCount > 0) &&
+      onRecalculateRatings,
   );
   const canExportOverallImage = Boolean(ratingState?.ratingsFinalizedAt && overallSummary.length > 0);
   const ratingItems = ratingState?.items ?? [];
@@ -499,6 +507,18 @@ export function PreMatchPage({
 
     try {
       await onFinalizeRatings();
+    } catch {
+      // Parent banner already surfaces the failure.
+    }
+  };
+
+  const handleRecalculateRatings = async () => {
+    if (!onRecalculateRatings) {
+      return;
+    }
+
+    try {
+      await onRecalculateRatings();
     } catch {
       // Parent banner already surfaces the failure.
     }
@@ -1068,16 +1088,26 @@ export function PreMatchPage({
                 <button
                   type="button"
                   className="ghost-button"
-                  disabled={!canFinalizeRatings || isFinalizingRatings}
+                  disabled={!canFinalizeRatings || isFinalizingRatings || isRecalculatingRatings}
                   onClick={() => void handleFinalizeRatings()}
                 >
                   {isFinalizingRatings ? "Finalizando..." : "Finalizar janela"}
                 </button>
               )}
+              {canManageMatch && ratingState?.ratingsFinalizedAt && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={!canRecalculateRatings || isRecalculatingRatings || isFinalizingRatings}
+                  onClick={() => void handleRecalculateRatings()}
+                >
+                  {isRecalculatingRatings ? "Recalculando..." : "Recalcular overalls"}
+                </button>
+              )}
               <button
                 type="button"
                 className="ghost-button"
-                disabled={!canExportOverallImage}
+                disabled={!canExportOverallImage || isRecalculatingRatings}
                 onClick={handleExportOverallImage}
               >
                 Exportar imagem

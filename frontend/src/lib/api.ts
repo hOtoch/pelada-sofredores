@@ -990,6 +990,17 @@ export async function finalizeMatchRatings(token: string, matchId: string) {
   return mapMatchPlayerRatingState(data);
 }
 
+export async function recalculateMatchRatings(token: string, matchId: string) {
+  const data = await request<RawMatchPlayerRatingState>(
+    `/matches/${matchId}/recalculate-ratings/`,
+    {
+      method: "POST",
+    },
+    token,
+  );
+  return mapMatchPlayerRatingState(data);
+}
+
 function toPlayerPayload(values: PlayerFormValues) {
   return {
     full_name: values.fullName,

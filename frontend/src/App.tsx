@@ -72,6 +72,7 @@ import {
   mapGeneratedTeams,
   markGuestFeePaid as markGuestFeePaidRequest,
   patchPlayerStatus,
+  recalculateMatchRatings,
   resetUserAccountPassword,
   registerAccount,
   createUserAccount as createUserAccountRequest,
@@ -308,6 +309,7 @@ export default function App() {
   const [isSubmittingMatch, setIsSubmittingMatch] = useState(false);
   const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
   const [isFinalizingRatings, setIsFinalizingRatings] = useState(false);
+  const [isRecalculatingRatings, setIsRecalculatingRatings] = useState(false);
   const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
   const [isSubmittingRoster, setIsSubmittingRoster] = useState(false);
   const [isSubmittingAccount, setIsSubmittingAccount] = useState(false);
@@ -764,6 +766,32 @@ export default function App() {
       throw error;
     } finally {
       setIsFinalizingRatings(false);
+    }
+  };
+
+  const handleRecalculateRatings = async () => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsRecalculatingRatings(true);
+    setScreenError(undefined);
+
+    try {
+      const nextRatingState = await recalculateMatchRatings(token, currentMatch.id);
+      const [nextPlayers, nextAttendance] = await Promise.all([
+        listPlayers(token),
+        listAttendance(token, currentMatch.id),
+      ]);
+      setMatchRatingState(nextRatingState);
+      setPlayers(nextPlayers);
+      setAttendance(nextAttendance);
+      reportSuccess("Overalls recalculados com a regra atual.");
+    } catch (error) {
+      reportError("Falha ao recalcular os overalls.", error);
+      throw error;
+    } finally {
+      setIsRecalculatingRatings(false);
     }
   };
 
@@ -1599,6 +1627,7 @@ export default function App() {
                 isClearingTeams={isClearingTeams}
                 isSubmittingRatings={isSubmittingRatings}
                 isFinalizingRatings={isFinalizingRatings}
+                isRecalculatingRatings={isRecalculatingRatings}
                 isSubmittingMatch={isSubmittingMatch}
                 isSubmittingAttendance={isSubmittingAttendance}
                 canManageAttendance={isAdmin}
@@ -1620,6 +1649,7 @@ export default function App() {
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
                 onFinalizeRatings={() => handleFinalizeRatings()}
+                onRecalculateRatings={() => handleRecalculateRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
               />
             )}
@@ -1640,6 +1670,7 @@ export default function App() {
                 isClearingTeams={isClearingTeams}
                 isSubmittingRatings={isSubmittingRatings}
                 isFinalizingRatings={isFinalizingRatings}
+                isRecalculatingRatings={isRecalculatingRatings}
                 isSubmittingMatch={isSubmittingMatch}
                 isSubmittingAttendance={isSubmittingAttendance}
                 canManageAttendance={isAdmin}
@@ -1661,6 +1692,7 @@ export default function App() {
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
                 onFinalizeRatings={() => handleFinalizeRatings()}
+                onRecalculateRatings={() => handleRecalculateRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
               />
             )}

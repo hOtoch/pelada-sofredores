@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.db.models import Avg, Case, Count, DecimalField, F, Q, Sum, Value, When
@@ -140,21 +140,85 @@ def clamp_overall(value: int) -> int:
 
 
 RATING_WINDOW_DURATION = timedelta(hours=24)
+RATING_OVERALL_WEIGHT = Decimal("0.25")
+RATING_MAX_OVERALL_DELTA = Decimal("6")
 
 
-def recalculate_player_overall_from_match_ratings(player: Player) -> None:
-    rating_average = MatchPlayerRating.objects.filter(rated_player=player).aggregate(avg_score=Avg("score"))[
-        "avg_score"
-    ]
+def get_rating_performance_adjustment(rating_average: Decimal) -> Decimal:
+    if rating_average >= Decimal("9.0"):
+        return Decimal("2")
+
+    if rating_average >= Decimal("8.0"):
+        return Decimal("1")
+
+    if rating_average <= Decimal("2.0"):
+        return Decimal("-2")
+
+    if rating_average <= Decimal("4.0"):
+        return Decimal("-1")
+
+    return Decimal("0")
+
+
+def clamp_overall_delta(value: Decimal) -> Decimal:
+    return max(-RATING_MAX_OVERALL_DELTA, min(RATING_MAX_OVERALL_DELTA, value))
+
+
+def recalculate_player_overall_from_match_ratings(
+    player: Player, match: Match, *, base_overall: int | None = None
+) -> None:
+    rating_average = MatchPlayerRating.objects.filter(match=match, rated_player=player).aggregate(
+        avg_score=Avg("score")
+    )["avg_score"]
     if rating_average is None:
         return
 
-    community_overall = Decimal(str(rating_average)) * Decimal("10")
-    next_overall = (
-        Decimal(player.overall) * Decimal("0.85") + community_overall * Decimal("0.15")
-    ).quantize(Decimal("1"))
+    current_overall = player.overall if base_overall is None else base_overall
+    rating_average_decimal = Decimal(str(rating_average))
+    community_overall = rating_average_decimal * Decimal("10")
+    base_delta = (community_overall - Decimal(current_overall)) * RATING_OVERALL_WEIGHT
+    performance_adjustment = get_rating_performance_adjustment(rating_average_decimal)
+    overall_delta = clamp_overall_delta(base_delta + performance_adjustment).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
+    next_overall = Decimal(current_overall) + overall_delta
     player.overall = clamp_overall(int(next_overall))
     player.save(update_fields=["overall", "updated_at"])
+
+
+def recalculate_finalized_match_ratings(match: Match) -> bool:
+    if match.status != Match.Status.ARCHIVED or not match.ratings_finalized_at:
+        return False
+
+    with transaction.atomic():
+        locked_match = Match.objects.select_for_update().get(pk=match.pk)
+        if locked_match.status != Match.Status.ARCHIVED or not locked_match.ratings_finalized_at:
+            match.ratings_finalized_at = locked_match.ratings_finalized_at
+            return False
+
+        rated_attendance_ids = (
+            MatchPlayerRating.objects.filter(match=locked_match)
+            .values_list("rated_attendance_id", flat=True)
+            .distinct()
+        )
+        attendance_overall_by_player_id = {
+            entry.player_id: entry.overall
+            for entry in MatchAttendance.objects.filter(
+                match=locked_match,
+                id__in=rated_attendance_ids,
+                player__isnull=False,
+            )
+        }
+
+        for player in Player.objects.select_for_update().filter(id__in=attendance_overall_by_player_id):
+            recalculate_player_overall_from_match_ratings(
+                player,
+                locked_match,
+                base_overall=attendance_overall_by_player_id[player.id],
+            )
+
+        match.ratings_finalized_at = locked_match.ratings_finalized_at
+        return True
 
 
 def get_rating_window_started_at(match: Match):
@@ -199,7 +263,7 @@ def finalize_match_ratings(match: Match, *, force: bool = False) -> bool:
             .distinct()
         )
         for player in Player.objects.filter(id__in=rated_player_ids):
-            recalculate_player_overall_from_match_ratings(player)
+            recalculate_player_overall_from_match_ratings(player, locked_match)
 
         locked_match.ratings_finalized_at = timezone.now()
         locked_match.save(update_fields=["ratings_finalized_at", "updated_at"])
@@ -608,6 +672,17 @@ class MatchViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "Arquive a pelada antes de finalizar as notas."})
 
         finalize_match_ratings(match, force=True)
+        return Response(self._build_rating_state(match))
+
+    @action(detail=True, methods=["post"], url_path="recalculate-ratings")
+    def recalculate_ratings(self, request, pk=None):
+        match = self.get_object()
+        if match.status != Match.Status.ARCHIVED:
+            raise ValidationError({"detail": "Arquive a pelada antes de recalcular as notas."})
+        if not match.ratings_finalized_at:
+            raise ValidationError({"detail": "Finalize a janela de notas antes de recalcular os overalls."})
+
+        recalculate_finalized_match_ratings(match)
         return Response(self._build_rating_state(match))
 
 
