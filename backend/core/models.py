@@ -303,7 +303,7 @@ class MatchPlayerRating(TimestampedModel):
         related_name="received_match_ratings",
         on_delete=models.CASCADE,
     )
-    score = models.PositiveSmallIntegerField()
+    score = models.DecimalField(max_digits=3, decimal_places=1)
 
     class Meta:
         db_table = "match_player_ratings"

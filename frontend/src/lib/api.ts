@@ -158,7 +158,7 @@ type RawMatchPlayerRatingItem = {
   player_id: string;
   display_name: string;
   current_overall: number;
-  score: number | null;
+  score: number | string | null;
   average_score: number | string | null;
   rating_count: number;
 };
@@ -216,7 +216,7 @@ type RawMatchPlayerRatingLogEntry = {
   rated_attendance_id: string;
   rated_player_id: string;
   rated_display_name: string;
-  score: number;
+  score: number | string;
   created_at: string;
   updated_at: string;
 };
@@ -588,7 +588,7 @@ function mapMatchPlayerRatingState(raw: RawMatchPlayerRatingState): MatchPlayerR
       playerId: item.player_id,
       displayName: item.display_name,
       currentOverall: item.current_overall,
-      score: item.score,
+      score: item.score == null ? null : toNumber(item.score),
       averageScore: item.average_score == null ? null : toNumber(item.average_score),
       ratingCount: item.rating_count,
     })),
@@ -598,7 +598,7 @@ function mapMatchPlayerRatingState(raw: RawMatchPlayerRatingState): MatchPlayerR
       ratedAttendanceId: entry.rated_attendance_id,
       ratedPlayerId: entry.rated_player_id,
       ratedDisplayName: entry.rated_display_name,
-      score: entry.score,
+      score: toNumber(entry.score),
       createdAt: entry.created_at,
       updatedAt: entry.updated_at,
     })),

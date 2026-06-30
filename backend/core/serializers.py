@@ -333,7 +333,7 @@ class MatchPlayerRatingItemSerializer(serializers.Serializer):
     player_id = serializers.UUIDField()
     display_name = serializers.CharField()
     current_overall = serializers.IntegerField()
-    score = serializers.IntegerField(allow_null=True)
+    score = serializers.DecimalField(max_digits=3, decimal_places=1, allow_null=True)
     average_score = serializers.DecimalField(max_digits=4, decimal_places=2, allow_null=True)
     rating_count = serializers.IntegerField()
 
@@ -344,7 +344,7 @@ class MatchPlayerRatingLogSerializer(serializers.Serializer):
     rated_attendance_id = serializers.UUIDField()
     rated_player_id = serializers.UUIDField()
     rated_display_name = serializers.CharField()
-    score = serializers.IntegerField()
+    score = serializers.DecimalField(max_digits=3, decimal_places=1)
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
 
@@ -374,7 +374,12 @@ class MatchPlayerRatingStateSerializer(serializers.Serializer):
 
 class MatchPlayerRatingInputItemSerializer(serializers.Serializer):
     attendance_id = serializers.UUIDField()
-    score = serializers.IntegerField(min_value=1, max_value=10)
+    score = serializers.DecimalField(
+        max_digits=3,
+        decimal_places=1,
+        min_value=Decimal("1.0"),
+        max_value=Decimal("10.0"),
+    )
 
 
 class MatchPlayerRatingSubmitSerializer(serializers.Serializer):

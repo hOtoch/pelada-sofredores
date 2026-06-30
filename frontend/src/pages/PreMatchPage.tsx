@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "
 
 import type {
   AttendanceStatus,
+  MatchPlayerRatingLogEntry,
   MatchPlayerOverallSummary,
   MatchPlayerRatingInput,
   MatchStatus,
@@ -65,12 +66,23 @@ const formatDateTime = (value: string) =>
     timeStyle: "short",
   });
 
+const toDateInputValue = (value: string) => {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+};
+
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
 
 const ratingWindowDurationMs = 24 * 60 * 60 * 1000;
+const ratingLogPageSize = 8;
+
+const getRatingLogRaterFilterValue = (entry: MatchPlayerRatingLogEntry) =>
+  entry.raterUserId ?? `legacy:${entry.raterDisplayName}`;
+
+const formatRatingScore = (score: number) => score.toFixed(1);
 const overallHistoryPalette = [
   "#34d399",
   "#60a5fa",
@@ -578,6 +590,10 @@ export function PreMatchPage({
   const [resultSummary, setResultSummary] = useState("");
   const [ratingDraft, setRatingDraft] = useState<Record<string, number>>({});
   const [ratingCardIndex, setRatingCardIndex] = useState(0);
+  const [ratingLogRaterFilter, setRatingLogRaterFilter] = useState("");
+  const [ratingLogRatedFilter, setRatingLogRatedFilter] = useState("");
+  const [ratingLogDateFilter, setRatingLogDateFilter] = useState("");
+  const [ratingLogPage, setRatingLogPage] = useState(1);
 
   const confirmedCount = attendance.filter((entry) => entry.attendanceStatus === "CONFIRMED").length;
   const isEditableMatch = Boolean(match && (match.status === "OPEN" || match.status === "DRAFT"));
@@ -600,9 +616,11 @@ export function PreMatchPage({
   );
   const canExportOverallImage = Boolean(ratingState?.ratingsFinalizedAt && overallSummary.length > 0);
   const ratingItems = ratingState?.items ?? [];
+  const ratingLogEntries = ratingState?.log ?? [];
   const completedRatingCount = ratingItems.filter((item) => Boolean(ratingDraft[item.attendanceId])).length;
   const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
   const activeRatingScore = activeRatingItem ? ratingDraft[activeRatingItem.attendanceId] ?? 0 : 0;
+  const activeRatingFinalScore = Math.ceil(activeRatingScore);
   const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
 
   const matchHistory = useMemo(
@@ -629,6 +647,41 @@ export function PreMatchPage({
   );
   const shouldShowOverallHistory =
     activeSection === "ratings" && (!hasOpenRatingWindow || selectedRatingWindowIsClosed);
+  const ratingLogRaterOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    ratingLogEntries.forEach((entry) => {
+      options.set(getRatingLogRaterFilterValue(entry), entry.raterDisplayName);
+    });
+    return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) =>
+      left.label.localeCompare(right.label),
+    );
+  }, [ratingLogEntries]);
+  const ratingLogRatedOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    ratingLogEntries.forEach((entry) => {
+      options.set(entry.ratedAttendanceId, entry.ratedDisplayName);
+    });
+    return Array.from(options, ([value, label]) => ({ value, label })).sort((left, right) =>
+      left.label.localeCompare(right.label),
+    );
+  }, [ratingLogEntries]);
+  const filteredRatingLog = useMemo(
+    () =>
+      ratingLogEntries.filter((entry) => {
+        const matchesRater =
+          !ratingLogRaterFilter || getRatingLogRaterFilterValue(entry) === ratingLogRaterFilter;
+        const matchesRated = !ratingLogRatedFilter || entry.ratedAttendanceId === ratingLogRatedFilter;
+        const matchesDate = !ratingLogDateFilter || toDateInputValue(entry.updatedAt) === ratingLogDateFilter;
+        return matchesRater && matchesRated && matchesDate;
+      }),
+    [ratingLogDateFilter, ratingLogEntries, ratingLogRatedFilter, ratingLogRaterFilter],
+  );
+  const ratingLogPageCount = Math.max(1, Math.ceil(filteredRatingLog.length / ratingLogPageSize));
+  const currentRatingLogPage = Math.min(ratingLogPage, ratingLogPageCount);
+  const paginatedRatingLog = filteredRatingLog.slice(
+    (currentRatingLogPage - 1) * ratingLogPageSize,
+    currentRatingLogPage * ratingLogPageSize,
+  );
 
   useEffect(() => {
     setResultSummary(match?.resultSummary ?? "");
@@ -646,6 +699,10 @@ export function PreMatchPage({
 
   useEffect(() => {
     setRatingCardIndex(0);
+    setRatingLogRaterFilter("");
+    setRatingLogRatedFilter("");
+    setRatingLogDateFilter("");
+    setRatingLogPage(1);
   }, [ratingState?.matchId]);
 
   useEffect(() => {
@@ -653,6 +710,16 @@ export function PreMatchPage({
       setRatingCardIndex(Math.max(ratingItems.length - 1, 0));
     }
   }, [ratingCardIndex, ratingItems.length]);
+
+  useEffect(() => {
+    setRatingLogPage(1);
+  }, [ratingLogDateFilter, ratingLogRatedFilter, ratingLogRaterFilter]);
+
+  useEffect(() => {
+    if (ratingLogPage > ratingLogPageCount) {
+      setRatingLogPage(ratingLogPageCount);
+    }
+  }, [ratingLogPage, ratingLogPageCount]);
 
   const handleGuestField =
     (field: keyof GuestFormValues) =>
@@ -1557,7 +1624,7 @@ export function PreMatchPage({
             <p className="empty-state">Selecione uma pelada para ver as notas.</p>
           ) : !ratingState ? (
             <p className="empty-state">Notas indisponíveis para esta pelada.</p>
-          ) : ratingItems.length === 0 && ratingState.log.length === 0 ? (
+          ) : ratingItems.length === 0 && ratingLogEntries.length === 0 ? (
             <p className="empty-state">
               {ratingState.ratingsFinalizedAt && overallSummary.length > 0
                 ? "Janela finalizada. Exporte a imagem para compartilhar os overalls atualizados."
@@ -1580,7 +1647,7 @@ export function PreMatchPage({
                   {activeRatingItem && (
                     <article
                       className={`rating-player-card rating-carousel-card ${
-                        activeRatingScore ? `rated score-${activeRatingScore}` : ""
+                        activeRatingScore ? `rated score-${activeRatingFinalScore}` : ""
                       }`}
                     >
                       <header>
@@ -1596,34 +1663,40 @@ export function PreMatchPage({
                       <div className="rating-impact-panel" aria-live="polite">
                         <div className="rating-selected-score">
                           <span>Nota</span>
-                          <strong>{activeRatingScore || "-"}</strong>
+                          <strong>{activeRatingScore ? activeRatingScore.toFixed(1) : "-"}</strong>
                         </div>
                         <div className="rating-card-stripes" aria-hidden="true">
                           {Array.from({ length: 10 }, (_, stripeIndex) => (
                             <span
                               key={stripeIndex}
-                              className={stripeIndex < activeRatingScore ? "filled" : ""}
+                              className={stripeIndex < activeRatingFinalScore ? "filled" : ""}
                             />
                           ))}
                         </div>
                       </div>
                       {ratingState.canRate ? (
                         <div className="rating-score-grid">
-                          {Array.from({ length: 10 }, (_, scoreIndex) => scoreIndex + 1).map((score) => (
-                            <button
-                              key={score}
-                              type="button"
-                              className={`rating-score-button ${activeRatingScore === score ? "active" : ""}`}
-                              onClick={() =>
+                          <div className="rating-score-input">
+                            <input
+                              aria-label="Nota do jogador"
+                              type="number"
+                              min="1"
+                              max="10"
+                              step="0.1"
+                              inputMode="decimal"
+                              value={activeRatingScore || ""}
+                              onChange={(event) => {
+                                const nextScore = Number(event.target.value);
                                 setRatingDraft((prev) => ({
                                   ...prev,
-                                  [activeRatingItem.attendanceId]: score,
-                                }))
-                              }
-                            >
-                              {score}
-                            </button>
-                          ))}
+                                  [activeRatingItem.attendanceId]:
+                                    Number.isFinite(nextScore) && nextScore >= 1 && nextScore <= 10
+                                      ? nextScore
+                                      : 0,
+                                }));
+                              }}
+                            />
+                          </div>
                         </div>
                       ) : (
                         <p className="empty-state">
@@ -1685,28 +1758,97 @@ export function PreMatchPage({
               <div className="rating-log-panel">
                 <div className="ledger-heading">
                   <h3>Log de votos</h3>
-                  <span className="muted">{ratingState.log.length} registro(s)</span>
+                  <span className="muted">
+                    {filteredRatingLog.length}/{ratingLogEntries.length} registro(s)
+                  </span>
                 </div>
-                {ratingState.log.length === 0 ? (
-                  <p className="empty-state">Nenhum voto registrado ainda.</p>
-                ) : (
-                  <div className="rating-log-list">
-                    {ratingState.log.map((entry) => (
-                      <article
-                        key={`${entry.raterUserId ?? "legacy"}-${entry.ratedAttendanceId}-${entry.updatedAt}`}
-                        className="rating-log-row"
+                {ratingLogEntries.length > 0 && (
+                  <div className="rating-log-filters">
+                    <label>
+                      <span>Quem votou</span>
+                      <select
+                        value={ratingLogRaterFilter}
+                        onChange={(event) => setRatingLogRaterFilter(event.target.value)}
                       >
-                        <div>
-                          <strong>{entry.raterDisplayName}</strong>
-                          <span className="muted">votou em {entry.ratedDisplayName}</span>
-                        </div>
-                        <div className="rating-log-score">
-                          <strong>{entry.score}</strong>
-                          <span>{formatDateTime(entry.updatedAt)}</span>
-                        </div>
-                      </article>
-                    ))}
+                        <option value="">Todos</option>
+                        {ratingLogRaterOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Quem recebeu</span>
+                      <select
+                        value={ratingLogRatedFilter}
+                        onChange={(event) => setRatingLogRatedFilter(event.target.value)}
+                      >
+                        <option value="">Todos</option>
+                        {ratingLogRatedOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Data do voto</span>
+                      <input
+                        type="date"
+                        value={ratingLogDateFilter}
+                        onChange={(event) => setRatingLogDateFilter(event.target.value)}
+                      />
+                    </label>
                   </div>
+                )}
+                {ratingLogEntries.length === 0 ? (
+                  <p className="empty-state">Nenhum voto registrado ainda.</p>
+                ) : filteredRatingLog.length === 0 ? (
+                  <p className="empty-state">Nenhum voto encontrado para os filtros selecionados.</p>
+                ) : (
+                  <>
+                    <div className="rating-log-list">
+                      {paginatedRatingLog.map((entry) => (
+                        <article
+                          key={`${entry.raterUserId ?? "legacy"}-${entry.ratedAttendanceId}-${entry.updatedAt}`}
+                          className="rating-log-row"
+                        >
+                          <div>
+                            <strong>{entry.raterDisplayName}</strong>
+                            <span className="muted">votou em {entry.ratedDisplayName}</span>
+                          </div>
+                          <div className="rating-log-score">
+                            <strong>{formatRatingScore(entry.score)}</strong>
+                            <span>{formatDateTime(entry.updatedAt)}</span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    {ratingLogPageCount > 1 && (
+                      <div className="rating-log-pagination">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={currentRatingLogPage <= 1}
+                          onClick={() => setRatingLogPage((page) => Math.max(1, page - 1))}
+                        >
+                          ‹
+                        </button>
+                        <span>
+                          Página {currentRatingLogPage} de {ratingLogPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={currentRatingLogPage >= ratingLogPageCount}
+                          onClick={() => setRatingLogPage((page) => Math.min(ratingLogPageCount, page + 1))}
+                        >
+                          ›
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </>

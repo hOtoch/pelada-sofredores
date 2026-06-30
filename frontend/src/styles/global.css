@@ -1871,8 +1871,35 @@ button {
 .rating-score-grid {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: 1fr;
   gap: 0.45rem;
+}
+
+.rating-score-input {
+  display: grid;
+}
+
+.rating-score-input input {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 8px;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: 900;
+  text-align: center;
+  outline: none;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.rating-score-input input:focus {
+  border-color: rgba(250, 204, 21, 0.72);
+  background: rgba(250, 204, 21, 0.12);
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.12);
 }
 
 .rating-score-button {
@@ -1967,6 +1994,36 @@ button {
   margin-top: 0.85rem;
 }
 
+.rating-log-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.95rem;
+}
+
+.rating-log-filters label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.rating-log-filters span {
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.rating-log-filters select,
+.rating-log-filters input {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--color-text-primary);
+  font: inherit;
+  outline: none;
+}
+
 .rating-log-row {
   display: flex;
   justify-content: space-between;
@@ -1996,6 +2053,26 @@ button {
 .rating-log-score span {
   color: var(--color-text-secondary);
   font-size: 0.78rem;
+}
+
+.rating-log-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.rating-log-pagination span {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.rating-log-pagination button {
+  width: 38px;
+  min-height: 34px;
+  padding: 0;
 }
 
 @keyframes rating-card-enter {
@@ -2370,6 +2447,10 @@ select.input-field option:checked {
   .rating-carousel-control {
     width: 38px;
     height: 38px;
+  }
+
+  .rating-log-filters {
+    grid-template-columns: 1fr;
   }
 
   .rating-log-row {

@@ -549,7 +549,7 @@ class ApiFlowTests(APITestCase):
         state_response = self.client.get(f"/api/matches/{self.match.id}/player-ratings/")
         submit_response = self.client.post(
             f"/api/matches/{self.match.id}/player-ratings/",
-            {"ratings": [{"attendance_id": str(target_attendance.id), "score": 10}]},
+            {"ratings": [{"attendance_id": str(target_attendance.id), "score": 6.5}]},
             format="json",
         )
 
@@ -561,7 +561,13 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(submit_response.data["log"][0]["rater_user_id"], str(self.common_user.id))
         self.assertEqual(submit_response.data["log"][0]["rater_display_name"], self.common_user.display_name)
         self.assertEqual(submit_response.data["log"][0]["rated_display_name"], target_attendance.display_name)
-        self.assertEqual(submit_response.data["log"][0]["score"], 10)
+        self.assertEqual(submit_response.data["log"][0]["score"], "6.5")
+        rated_item = next(
+            item for item in submit_response.data["items"] if item["attendance_id"] == str(target_attendance.id)
+        )
+        self.assertEqual(rated_item["average_score"], "6.50")
+        stored_rating = MatchPlayerRating.objects.get(match=self.match, rater_user=self.common_user)
+        self.assertEqual(stored_rating.score, Decimal("6.5"))
         self.assertEqual(MatchPlayerRating.objects.filter(match=self.match, rater_user=self.common_user).count(), 1)
         self.players[1].refresh_from_db()
         self.assertEqual(self.players[1].overall, original_overall)
@@ -613,7 +619,9 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.data["can_rate"])
         self.assertEqual(response.data["items"], [])
-        self.assertEqual(response.data["log"], [])
+        self.assertEqual(len(response.data["log"]), 1)
+        self.assertEqual(response.data["log"][0]["rated_display_name"], target_attendance.display_name)
+        self.assertEqual(response.data["log"][0]["score"], "10.0")
         self.assertIsNotNone(response.data["ratings_finalized_at"])
         summary_entry = next(
             item for item in response.data["overall_summary"] if item["player_id"] == str(self.players[1].id)
@@ -714,9 +722,9 @@ class ApiFlowTests(APITestCase):
         self.match.archived_at = timezone.now()
         self.match.save(update_fields=["status", "archived_at"])
         for rater, score in (
-            (self.common_user, 7),
-            (second_rater, 7),
-            (third_rater, 8),
+            (self.common_user, Decimal("7.0")),
+            (second_rater, Decimal("8.0")),
+            (third_rater, Decimal("10.0")),
         ):
             MatchPlayerRating.objects.create(
                 match=self.match,
@@ -730,13 +738,67 @@ class ApiFlowTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         target_player.refresh_from_db()
-        self.assertEqual(target_player.overall, 71)
+        self.assertEqual(target_player.overall, 74)
         summary_entry = next(
             item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
         )
         self.assertEqual(summary_entry["previous_overall"], 70)
-        self.assertEqual(summary_entry["current_overall"], 71)
-        self.assertEqual(summary_entry["delta"], 1)
+        self.assertEqual(summary_entry["current_overall"], 74)
+        self.assertEqual(summary_entry["delta"], 4)
+        self.assertEqual(summary_entry["average_score"], "8.00")
+
+    def test_rating_finalization_trims_outliers_and_rounds_final_score_up(self) -> None:
+        target_player = self.players[1]
+        target_player.overall = 60
+        target_player.save(update_fields=["overall"])
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=target_player)
+        target_attendance.overall = 60
+        target_attendance.save(update_fields=["overall"])
+        raters = [
+            self.common_user,
+            User.objects.create_user(
+                username="comum-2",
+                email="comum-2@pelada.local",
+                password=self.password,
+                role=Role.COMMON,
+            ),
+            User.objects.create_user(
+                username="comum-3",
+                email="comum-3@pelada.local",
+                password=self.password,
+                role=Role.COMMON,
+            ),
+            User.objects.create_user(
+                username="comum-4",
+                email="comum-4@pelada.local",
+                password=self.password,
+                role=Role.COMMON,
+            ),
+        ]
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        scores = (Decimal("1.0"), Decimal("6.1"), Decimal("6.5"), Decimal("10.0"))
+        for rater, score in zip(raters, scores):
+            MatchPlayerRating.objects.create(
+                match=self.match,
+                rater_user=rater,
+                rated_attendance=target_attendance,
+                rated_player=target_player,
+                score=score,
+            )
+
+        response = self.client.post(f"/api/matches/{self.match.id}/finalize-ratings/")
+
+        self.assertEqual(response.status_code, 200)
+        target_player.refresh_from_db()
+        self.assertEqual(target_player.overall, 63)
+        summary_entry = next(
+            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+        )
+        self.assertEqual(summary_entry["average_score"], "6.30")
+        self.assertEqual(summary_entry["rating_count"], 4)
+        self.assertEqual(summary_entry["current_overall"], 63)
 
     def test_excellent_match_rating_can_move_high_overall_player_more_than_two_points(self) -> None:
         target_player = self.players[1]

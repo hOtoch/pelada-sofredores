@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 
 from django.db import transaction
-from django.db.models import Avg, Case, Count, DecimalField, F, Q, Sum, Value, When
+from django.db.models import Case, Count, DecimalField, F, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -165,20 +165,58 @@ def clamp_overall_delta(value: Decimal) -> Decimal:
     return max(-RATING_MAX_OVERALL_DELTA, min(RATING_MAX_OVERALL_DELTA, value))
 
 
+def get_trimmed_rating_average(scores: list[Decimal]) -> Decimal | None:
+    if not scores:
+        return None
+
+    sorted_scores = sorted(Decimal(str(score)) for score in scores)
+    ratings_for_average = sorted_scores[1:-1] if len(sorted_scores) >= 3 else sorted_scores
+    return sum(ratings_for_average, Decimal("0")) / Decimal(len(ratings_for_average))
+
+
+def get_final_rating_score(rating_average: Decimal) -> Decimal:
+    return rating_average.quantize(Decimal("1"), rounding=ROUND_CEILING)
+
+
+def get_match_rating_stats(match: Match) -> dict:
+    rating_stats = {}
+    for rating in MatchPlayerRating.objects.filter(match=match).values(
+        "rated_attendance_id",
+        "score",
+    ):
+        stats = rating_stats.setdefault(
+            rating["rated_attendance_id"],
+            {"scores": [], "rating_count": 0},
+        )
+        stats["scores"].append(rating["score"])
+        stats["rating_count"] += 1
+
+    for stats in rating_stats.values():
+        stats["average_score"] = get_trimmed_rating_average(stats["scores"])
+        del stats["scores"]
+
+    return rating_stats
+
+
 def recalculate_player_overall_from_match_ratings(
     player: Player, match: Match, *, base_overall: int | None = None
 ) -> None:
-    rating_average = MatchPlayerRating.objects.filter(match=match, rated_player=player).aggregate(
-        avg_score=Avg("score")
-    )["avg_score"]
+    rating_average = get_trimmed_rating_average(
+        list(
+            MatchPlayerRating.objects.filter(match=match, rated_player=player).values_list(
+                "score", flat=True
+            )
+        )
+    )
     if rating_average is None:
         return
 
     current_overall = player.overall if base_overall is None else base_overall
     rating_average_decimal = Decimal(str(rating_average))
-    community_overall = rating_average_decimal * Decimal("10")
+    final_rating_score = get_final_rating_score(rating_average_decimal)
+    community_overall = final_rating_score * Decimal("10")
     base_delta = (community_overall - Decimal(current_overall)) * RATING_OVERALL_WEIGHT
-    performance_adjustment = get_rating_performance_adjustment(rating_average_decimal)
+    performance_adjustment = get_rating_performance_adjustment(final_rating_score)
     overall_delta = clamp_overall_delta(base_delta + performance_adjustment).quantize(
         Decimal("1"), rounding=ROUND_HALF_UP
     )
@@ -572,52 +610,7 @@ class MatchViewSet(viewsets.ModelViewSet):
             )
         return summary
 
-    def _build_rating_state(self, match):
-        finalize_match_ratings_if_due(match)
-        match.refresh_from_db(fields=["ratings_finalized_at"])
-        window_closes_at = get_rating_window_closes_at(match)
-        rating_stats = {
-            row["rated_attendance_id"]: row
-            for row in MatchPlayerRating.objects.filter(match=match)
-            .values("rated_attendance_id")
-            .annotate(average_score=Avg("score"), rating_count=Count("id"))
-        }
-        overall_summary = self._build_rating_overall_summary(match, rating_stats)
-        locked_reason = self._get_rating_lock_reason(match)
-        can_rate = bool(getattr(self.request.user, "role", None) != Role.ADMIN and not locked_reason)
-        is_window_closed = bool(
-            match.status == Match.Status.ARCHIVED
-            and (match.ratings_finalized_at or is_rating_window_expired(match))
-        )
-
-        if is_window_closed:
-            payload = {
-                "match_id": match.id,
-                "can_rate": False,
-                "has_submitted": False,
-                "locked_reason": locked_reason,
-                "window_closes_at": window_closes_at,
-                "ratings_finalized_at": match.ratings_finalized_at,
-                "items": [],
-                "log": [],
-                "overall_summary": overall_summary,
-            }
-            return MatchPlayerRatingStateSerializer(payload).data
-
-        participants_queryset = match.attendance_entries.select_related("player").filter(
-            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
-            player__isnull=False,
-        )
-        linked_player = getattr(self.request.user, "linked_player", None)
-        if linked_player:
-            participants_queryset = participants_queryset.exclude(player=linked_player)
-
-        participants = list(participants_queryset.order_by("display_name"))
-        rating_by_attendance = {
-            rating.rated_attendance_id: rating
-            for rating in MatchPlayerRating.objects.filter(match=match, rater_user=self.request.user)
-        }
-
+    def _build_rating_log(self, match):
         rating_log = []
         for rating in (
             MatchPlayerRating.objects.filter(match=match)
@@ -646,6 +639,49 @@ class MatchViewSet(viewsets.ModelViewSet):
                     "updated_at": rating.updated_at,
                 }
             )
+        return rating_log
+
+    def _build_rating_state(self, match):
+        finalize_match_ratings_if_due(match)
+        match.refresh_from_db(fields=["ratings_finalized_at"])
+        window_closes_at = get_rating_window_closes_at(match)
+        rating_stats = get_match_rating_stats(match)
+        overall_summary = self._build_rating_overall_summary(match, rating_stats)
+        rating_log = self._build_rating_log(match)
+        locked_reason = self._get_rating_lock_reason(match)
+        can_rate = bool(getattr(self.request.user, "role", None) != Role.ADMIN and not locked_reason)
+        is_window_closed = bool(
+            match.status == Match.Status.ARCHIVED
+            and (match.ratings_finalized_at or is_rating_window_expired(match))
+        )
+
+        if is_window_closed:
+            payload = {
+                "match_id": match.id,
+                "can_rate": False,
+                "has_submitted": False,
+                "locked_reason": locked_reason,
+                "window_closes_at": window_closes_at,
+                "ratings_finalized_at": match.ratings_finalized_at,
+                "items": [],
+                "log": rating_log,
+                "overall_summary": overall_summary,
+            }
+            return MatchPlayerRatingStateSerializer(payload).data
+
+        participants_queryset = match.attendance_entries.select_related("player").filter(
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            player__isnull=False,
+        )
+        linked_player = getattr(self.request.user, "linked_player", None)
+        if linked_player:
+            participants_queryset = participants_queryset.exclude(player=linked_player)
+
+        participants = list(participants_queryset.order_by("display_name"))
+        rating_by_attendance = {
+            rating.rated_attendance_id: rating
+            for rating in MatchPlayerRating.objects.filter(match=match, rater_user=self.request.user)
+        }
 
         items = []
         for entry in participants:
