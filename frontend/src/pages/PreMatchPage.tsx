@@ -621,6 +621,10 @@ export function PreMatchPage({
   const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
   const activeRatingScore = activeRatingItem ? ratingDraft[activeRatingItem.attendanceId] ?? 0 : 0;
   const activeRatingFinalScore = Math.ceil(activeRatingScore);
+  const activeRatingBaseScore = activeRatingScore ? Math.floor(activeRatingScore) : 0;
+  const activeRatingDecimalStep = activeRatingScore
+    ? Math.round((activeRatingScore - activeRatingBaseScore) * 10)
+    : 0;
   const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
 
   const matchHistory = useMemo(
@@ -1676,26 +1680,80 @@ export function PreMatchPage({
                       </div>
                       {ratingState.canRate ? (
                         <div className="rating-score-grid">
-                          <div className="rating-score-input">
-                            <input
-                              aria-label="Nota do jogador"
-                              type="number"
-                              min="1"
-                              max="10"
-                              step="0.1"
-                              inputMode="decimal"
-                              value={activeRatingScore || ""}
-                              onChange={(event) => {
-                                const nextScore = Number(event.target.value);
+                          <div className="rating-score-base-grid" aria-label="Nota base">
+                            {Array.from({ length: 10 }, (_, scoreIndex) => scoreIndex + 1).map((score) => (
+                              <button
+                                key={score}
+                                type="button"
+                                className={`rating-score-button ${
+                                  activeRatingBaseScore === score || (activeRatingScore === 10 && score === 10)
+                                    ? "active"
+                                    : ""
+                                }`}
+                                onClick={() =>
+                                  setRatingDraft((prev) => ({
+                                    ...prev,
+                                    [activeRatingItem.attendanceId]: score,
+                                  }))
+                                }
+                              >
+                                {score}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="rating-score-decimal-grid" aria-label="Ajuste decimal">
+                            {Array.from({ length: 10 }, (_, decimalIndex) => (
+                              <button
+                                key={decimalIndex}
+                                type="button"
+                                className={`rating-score-decimal-button ${
+                                  activeRatingScore && activeRatingDecimalStep === decimalIndex ? "active" : ""
+                                }`}
+                                disabled={!activeRatingBaseScore || activeRatingBaseScore >= 10}
+                                onClick={() => {
+                                  if (!activeRatingBaseScore || activeRatingBaseScore >= 10) {
+                                    return;
+                                  }
+                                  const nextScore = Number(`${activeRatingBaseScore}.${decimalIndex}`);
+                                  setRatingDraft((prev) => ({
+                                    ...prev,
+                                    [activeRatingItem.attendanceId]: nextScore,
+                                  }));
+                                }}
+                              >
+                                .{decimalIndex}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="rating-score-stepper" aria-label="Ajuste fino">
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={!activeRatingScore || activeRatingScore <= 1}
+                              onClick={() => {
+                                const nextScore = Math.max(1, Number((activeRatingScore - 0.1).toFixed(1)));
                                 setRatingDraft((prev) => ({
                                   ...prev,
-                                  [activeRatingItem.attendanceId]:
-                                    Number.isFinite(nextScore) && nextScore >= 1 && nextScore <= 10
-                                      ? nextScore
-                                      : 0,
+                                  [activeRatingItem.attendanceId]: nextScore,
                                 }));
                               }}
-                            />
+                            >
+                              -0.1
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={!activeRatingScore || activeRatingScore >= 10}
+                              onClick={() => {
+                                const nextScore = Math.min(10, Number((activeRatingScore + 0.1).toFixed(1)));
+                                setRatingDraft((prev) => ({
+                                  ...prev,
+                                  [activeRatingItem.attendanceId]: nextScore,
+                                }));
+                              }}
+                            >
+                              +0.1
+                            </button>
                           </div>
                         </div>
                       ) : (

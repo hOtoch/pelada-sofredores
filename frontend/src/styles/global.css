@@ -17,12 +17,18 @@
 }
 
 html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   background: var(--color-bg);
 }
 
 body {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   position: relative;
   font-family: var(--font-body);
   background:
@@ -48,7 +54,10 @@ body::before {
 }
 
 #root {
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   position: relative;
   isolation: isolate;
 }
@@ -108,7 +117,11 @@ button {
   grid-template-columns: minmax(280px, 320px) 1fr;
   gap: 1.25rem;
   padding: 1.2rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .app-shell.login-route {
@@ -426,6 +439,9 @@ button {
 }
 
 .main-area {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   padding: 0.35rem 0.75rem 1.6rem 0;
 }
 
@@ -1871,38 +1887,31 @@ button {
 .rating-score-grid {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+.rating-score-base-grid,
+.rating-score-decimal-grid {
+  display: grid;
   gap: 0.45rem;
 }
 
-.rating-score-input {
+.rating-score-base-grid {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.rating-score-decimal-grid {
+  grid-template-columns: repeat(10, 1fr);
+}
+
+.rating-score-stepper {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
 }
 
-.rating-score-input input {
-  width: 100%;
-  min-height: 48px;
-  border-radius: 8px;
-  border: 1px solid rgba(250, 204, 21, 0.28);
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--color-text-primary);
-  font: inherit;
-  font-weight: 900;
-  text-align: center;
-  outline: none;
-  transition:
-    border-color 0.16s ease,
-    background 0.16s ease,
-    box-shadow 0.16s ease;
-}
-
-.rating-score-input input:focus {
-  border-color: rgba(250, 204, 21, 0.72);
-  background: rgba(250, 204, 21, 0.12);
-  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.12);
-}
-
-.rating-score-button {
+.rating-score-button,
+.rating-score-decimal-button {
   min-height: 42px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1917,13 +1926,25 @@ button {
     box-shadow 0.16s ease;
 }
 
-.rating-score-button:hover {
+.rating-score-decimal-button {
+  min-height: 34px;
+  font-size: 0.76rem;
+}
+
+.rating-score-button:hover,
+.rating-score-decimal-button:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: rgba(250, 204, 21, 0.42);
   background: rgba(250, 204, 21, 0.12);
 }
 
-.rating-score-button.active {
+.rating-score-decimal-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.rating-score-button.active,
+.rating-score-decimal-button.active {
   background: linear-gradient(145deg, rgba(250, 204, 21, 0.96), rgba(52, 211, 153, 0.92));
   border-color: transparent;
   color: #111827;
@@ -2380,16 +2401,20 @@ select.input-field option:checked {
     grid-template-columns: 1fr;
     gap: 0.9rem;
     padding: 0.9rem;
+    max-width: 100vw;
   }
 
   .side-nav {
     position: static;
     height: auto;
     top: auto;
+    min-width: 0;
     padding: 1rem;
   }
 
   .main-area {
+    width: 100%;
+    min-width: 0;
     padding: 0 0 1rem;
   }
 
@@ -2440,13 +2465,38 @@ select.input-field option:checked {
   }
 
   .rating-carousel-shell {
-    grid-template-columns: 38px minmax(0, 1fr) 38px;
-    gap: 0.5rem;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    gap: 0.4rem;
   }
 
   .rating-carousel-control {
-    width: 38px;
+    width: 34px;
     height: 38px;
+  }
+
+  .rating-player-card {
+    min-width: 0;
+    padding: 0.9rem;
+  }
+
+  .rating-impact-panel {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .rating-selected-score {
+    min-height: 76px;
+  }
+
+  .rating-selected-score strong {
+    font-size: 1.95rem;
+  }
+
+  .rating-score-decimal-grid {
+    grid-template-columns: repeat(5, 1fr);
   }
 
   .rating-log-filters {
