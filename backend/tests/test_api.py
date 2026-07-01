@@ -271,6 +271,12 @@ class ApiFlowTests(APITestCase):
             expected_team_count=2,
             created_by=self.user,
         )
+        excluded_match = Match.objects.create(
+            scheduled_at=timezone.make_aware(datetime(2026, 6, 30, 20, 0)),
+            status=Match.Status.CLOSED,
+            expected_team_count=2,
+            created_by=self.user,
+        )
         MatchAttendance.objects.create(
             match=old_match,
             player=self.players[0],
@@ -278,6 +284,14 @@ class ApiFlowTests(APITestCase):
             is_guest=False,
             attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
             overall=55,
+        )
+        MatchAttendance.objects.create(
+            match=excluded_match,
+            player=self.players[0],
+            display_name=self.players[0].full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            overall=77,
         )
         MatchAttendance.objects.create(
             match=self.match,

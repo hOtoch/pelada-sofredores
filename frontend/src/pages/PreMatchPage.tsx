@@ -78,11 +78,14 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 
 const ratingWindowDurationMs = 24 * 60 * 60 * 1000;
 const ratingLogPageSize = 8;
+const excludedMatchHistoryDates = new Set(["2026-06-30"]);
 
 const getRatingLogRaterFilterValue = (entry: MatchPlayerRatingLogEntry) =>
   entry.raterUserId ?? `legacy:${entry.raterDisplayName}`;
 
 const formatRatingScore = (score: number) => score.toFixed(1);
+
+const getLocalDateKey = (value: string) => toDateInputValue(value);
 const overallHistoryPalette = [
   "#34d399",
   "#60a5fa",
@@ -628,7 +631,10 @@ export function PreMatchPage({
   const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
 
   const matchHistory = useMemo(
-    () => [...matches].sort((left, right) => right.scheduledAt.localeCompare(left.scheduledAt)),
+    () =>
+      matches
+        .filter((entry) => !excludedMatchHistoryDates.has(getLocalDateKey(entry.scheduledAt)))
+        .sort((left, right) => right.scheduledAt.localeCompare(left.scheduledAt)),
     [matches],
   );
   const hasOpenRatingWindow = useMemo(
@@ -649,8 +655,28 @@ export function PreMatchPage({
       ratingState?.ratingsFinalizedAt &&
       ratingItems.length === 0,
   );
+  const selectedRatingWindowClosesAt = ratingState?.windowClosesAt
+    ? Date.parse(ratingState.windowClosesAt)
+    : null;
+  const selectedRatingWindowIsOpen = Boolean(
+    activeSection === "ratings" &&
+      match?.status === "ARCHIVED" &&
+      !ratingState?.ratingsFinalizedAt &&
+      selectedRatingWindowClosesAt !== null &&
+      Number.isFinite(selectedRatingWindowClosesAt) &&
+      Date.now() < selectedRatingWindowClosesAt,
+  );
+  const shouldShowRatingArena = Boolean(
+    ratingState &&
+      (selectedRatingWindowIsOpen ||
+        ratingItems.length > 0 ||
+        ratingLogEntries.length > 0 ||
+        overallSummary.length > 0),
+  );
   const shouldShowOverallHistory =
-    activeSection === "ratings" && (!hasOpenRatingWindow || selectedRatingWindowIsClosed);
+    activeSection === "ratings" &&
+    !shouldShowRatingArena &&
+    (!hasOpenRatingWindow || selectedRatingWindowIsClosed);
   const ratingLogRaterOptions = useMemo(() => {
     const options = new Map<string, string>();
     ratingLogEntries.forEach((entry) => {

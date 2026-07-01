@@ -143,6 +143,7 @@ RATING_WINDOW_DURATION = timedelta(hours=24)
 RATING_OVERALL_WEIGHT = Decimal("0.25")
 RATING_MAX_OVERALL_DELTA = Decimal("6")
 OVERALL_HISTORY_START_DATE = date(2026, 5, 26)
+OVERALL_HISTORY_EXCLUDED_DATES = [date(2026, 6, 30)]
 
 
 def get_rating_performance_adjustment(rating_average: Decimal) -> Decimal:
@@ -532,6 +533,7 @@ class MatchViewSet(viewsets.ModelViewSet):
                 attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
                 player_id__in=member_player_ids,
             )
+            .exclude(match__scheduled_at__date__in=OVERALL_HISTORY_EXCLUDED_DATES)
             .order_by("match__scheduled_at", "display_name")
         )
         entries_by_player_id = {}
