@@ -141,6 +141,44 @@ const roleLabels = {
   COMMON: "Jogador",
 } as const;
 
+const ratingWindowDurationMs = 24 * 60 * 60 * 1000;
+
+const getRatingWindowStartedAt = (match: MatchSummary) => {
+  const timestamp = Date.parse(match.archivedAt ?? match.updatedAt ?? match.scheduledAt);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const isRatingWindowOpen = (match: MatchSummary) => {
+  if (match.status !== "ARCHIVED" || match.ratingsFinalizedAt) {
+    return false;
+  }
+
+  const startedAt = getRatingWindowStartedAt(match);
+  return startedAt !== null && Date.now() < startedAt + ratingWindowDurationMs;
+};
+
+const getLatestArchivedMatch = (matches: MatchSummary[]) =>
+  [...matches]
+    .filter((match) => match.status === "ARCHIVED")
+    .sort((left, right) => {
+      const leftArchivedAt = Date.parse(left.archivedAt ?? left.updatedAt ?? left.scheduledAt);
+      const rightArchivedAt = Date.parse(right.archivedAt ?? right.updatedAt ?? right.scheduledAt);
+      return (
+        (Number.isFinite(rightArchivedAt) ? rightArchivedAt : 0) -
+          (Number.isFinite(leftArchivedAt) ? leftArchivedAt : 0) ||
+        right.scheduledAt.localeCompare(left.scheduledAt)
+      );
+    })[0] ?? null;
+
+const getOpenRatingWindowMatch = (matches: MatchSummary[]) =>
+  [...matches]
+    .filter(isRatingWindowOpen)
+    .sort((left, right) => {
+      const leftStartedAt = getRatingWindowStartedAt(left) ?? 0;
+      const rightStartedAt = getRatingWindowStartedAt(right) ?? 0;
+      return rightStartedAt - leftStartedAt || right.scheduledAt.localeCompare(left.scheduledAt);
+    })[0] ?? null;
+
 function SidebarNavIcon({ icon }: { icon: NavigationIcon }) {
   switch (icon) {
     case "finance":
@@ -358,10 +396,15 @@ export default function App() {
       getCurrentMatch(authToken),
       listMatches(authToken),
     ]);
+    const latestArchivedMatch = getLatestArchivedMatch(allMatches);
+    const openRatingWindowMatch = getOpenRatingWindowMatch(allMatches);
+    const currentSelectedMatch = currentMatch ? allMatches.find((entry) => entry.id === currentMatch.id) : null;
+    const shouldPreferLatestArchivedMatch = location.pathname === "/ratings";
 
     const nextMatch =
       (preferredMatchId ? allMatches.find((entry) => entry.id === preferredMatchId) : null) ??
-      (currentMatch ? allMatches.find((entry) => entry.id === currentMatch.id) : null) ??
+      (shouldPreferLatestArchivedMatch ? latestArchivedMatch ?? currentSelectedMatch : currentSelectedMatch) ??
+      (!shouldPreferLatestArchivedMatch ? openRatingWindowMatch : null) ??
       (openMatch ? allMatches.find((entry) => entry.id === openMatch.id) ?? openMatch : null) ??
       allMatches[0] ??
       null;
@@ -633,6 +676,17 @@ export default function App() {
       isCancelled = true;
     };
   }, [currentMatch, token]);
+
+  useEffect(() => {
+    if (location.pathname !== "/ratings" || matches.length === 0) {
+      return;
+    }
+
+    const latestArchivedMatch = getLatestArchivedMatch(matches);
+    if (latestArchivedMatch && latestArchivedMatch.id !== currentMatch?.id) {
+      setCurrentMatch(latestArchivedMatch);
+    }
+  }, [currentMatch?.id, location.pathname, matches]);
 
   const handleLogin = async (identifier: string, password: string) => {
     setIsSubmittingLogin(true);
