@@ -256,6 +256,7 @@ class TransactionSerializer(serializers.ModelSerializer):
 
 class MatchAttendanceSerializer(serializers.ModelSerializer):
     player_name = serializers.CharField(source="player.full_name", read_only=True)
+    invited_by_name = serializers.CharField(source="invited_by.full_name", read_only=True)
     guest_fee_is_due = serializers.SerializerMethodField()
     guest_fee_outstanding = serializers.SerializerMethodField()
 
@@ -281,6 +282,7 @@ class MatchAttendanceSerializer(serializers.ModelSerializer):
             "is_guest",
             "attendance_status",
             "invited_by",
+            "invited_by_name",
             "assigned_team_number",
             "assigned_team_name",
             "confirmed_at",
@@ -294,6 +296,26 @@ class MatchAttendanceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    def validate_invited_by(self, value):
+        if value and (
+            value.player_type != Player.PlayerType.MEMBER
+            or not value.is_active
+        ):
+            raise serializers.ValidationError("Selecione um jogador ativo do elenco.")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        is_guest = attrs.get("is_guest", self.instance.is_guest if self.instance else False)
+        invited_by = attrs.get("invited_by", self.instance.invited_by if self.instance else None)
+
+        if self.instance is None and is_guest and invited_by is None:
+            raise serializers.ValidationError(
+                {"invited_by": "Associe o convidado a um jogador responsavel pela cobranca."}
+            )
+
+        return attrs
 
 
 class FinancialSummarySerializer(serializers.Serializer):

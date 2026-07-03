@@ -115,6 +115,7 @@ export interface AttendanceEntry {
   displayName: string;
   isGuest: boolean;
   invitedById?: string | null;
+  invitedByName?: string | null;
   attendanceStatus: AttendanceStatus;
   assignedTeamNumber?: number | null;
   assignedTeamName?: string | null;

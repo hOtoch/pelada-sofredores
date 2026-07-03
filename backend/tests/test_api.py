@@ -164,6 +164,41 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(Decimal(response.data["pending_total"]), Decimal("45.00"))
         self.assertEqual(Decimal(response.data["current_balance"]), Decimal("180.00"))
 
+    def test_guest_creation_requires_invited_by_player(self) -> None:
+        response = self.client.post(
+            "/api/attendance/",
+            {
+                "match": self.match.id,
+                "player": None,
+                "display_name": "Convidado Sem Responsavel",
+                "is_guest": True,
+                "attendance_status": MatchAttendance.AttendanceStatus.CONFIRMED,
+                "overall": 66,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("invited_by", response.data)
+
+        created_response = self.client.post(
+            "/api/attendance/",
+            {
+                "match": self.match.id,
+                "player": None,
+                "display_name": "Convidado Com Responsavel",
+                "is_guest": True,
+                "attendance_status": MatchAttendance.AttendanceStatus.CONFIRMED,
+                "invited_by": self.players[0].id,
+                "overall": 66,
+            },
+            format="json",
+        )
+
+        self.assertEqual(created_response.status_code, 201)
+        self.assertEqual(created_response.data["invited_by"], str(self.players[0].id))
+        self.assertEqual(created_response.data["invited_by_name"], self.players[0].full_name)
+
     def test_guest_fee_is_registered_as_pending_after_match_ends_and_can_be_paid(self) -> None:
         self.match.status = Match.Status.ARCHIVED
         self.match.archived_at = timezone.now()
@@ -202,6 +237,39 @@ class ApiFlowTests(APITestCase):
                 external_reference=f"guest-fee:{guest.id}",
                 amount=Decimal("14.00"),
                 status=Transaction.Status.POSTED,
+            ).exists()
+        )
+
+    def test_guest_fee_can_be_waived_without_posting_transaction(self) -> None:
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        guest = MatchAttendance.objects.create(
+            match=self.match,
+            display_name="Convidado Desconsiderado",
+            is_guest=True,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            invited_by=self.players[0],
+            overall=66,
+            guest_fee_amount=Decimal("14.00"),
+            guest_fee_status=MatchAttendance.GuestFeeStatus.PENDING,
+        )
+
+        summary_response = self.client.get("/api/dashboard/financial-summary/")
+        waive_response = self.client.post(f"/api/attendance/{guest.id}/waive-guest-fee/")
+        next_summary_response = self.client.get("/api/dashboard/financial-summary/")
+        next_guest_fee_due_response = self.client.get("/api/attendance/?guest_fee_due=true")
+
+        self.assertEqual(summary_response.status_code, 200)
+        self.assertEqual(Decimal(summary_response.data["pending_total"]), Decimal("59.00"))
+        self.assertEqual(waive_response.status_code, 200)
+        self.assertEqual(waive_response.data["guest_fee_status"], MatchAttendance.GuestFeeStatus.WAIVED)
+        self.assertFalse(waive_response.data["guest_fee_is_due"])
+        self.assertEqual(Decimal(next_summary_response.data["pending_total"]), Decimal("45.00"))
+        self.assertEqual(next_guest_fee_due_response.data, [])
+        self.assertFalse(
+            Transaction.objects.filter(
+                external_reference=f"guest-fee:{guest.id}",
             ).exists()
         )
 

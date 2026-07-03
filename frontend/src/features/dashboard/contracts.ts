@@ -56,6 +56,7 @@ export interface FinanceDashboardPageProps {
   onEditTransaction: (transactionId: string, values: TransactionFormValues) => Promise<void> | void;
   onVoidTransaction: (transactionId: string) => Promise<void> | void;
   onMarkGuestFeePaid: (attendanceId: string) => Promise<void> | void;
+  onWaiveGuestFee: (attendanceId: string) => Promise<void> | void;
   onAnalyticsPeriodChange?: (period: DashboardAnalyticsPeriod) => void;
   onOpenLedger?: () => void;
 }

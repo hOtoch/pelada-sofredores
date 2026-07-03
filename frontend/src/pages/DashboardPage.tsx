@@ -182,6 +182,7 @@ export function DashboardPage({
   onEditTransaction,
   onVoidTransaction,
   onMarkGuestFeePaid,
+  onWaiveGuestFee,
   onAnalyticsPeriodChange,
   onOpenLedger,
 }: FinanceDashboardPageProps) {
@@ -764,18 +765,31 @@ export function DashboardPage({
                   <div>
                     <strong>{entry.displayName}</strong>
                     <p className="muted">{matchLabel}</p>
+                    <p className="muted">
+                      Responsável: {entry.invitedByName ?? "Nao informado"}
+                    </p>
                   </div>
                   <div className="guest-fee-actions">
                     <strong>{formatCurrency(entry.guestFeeOutstanding)}</strong>
                     {canManageCash && (
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        disabled={isSubmittingGuestFee}
-                        onClick={() => void onMarkGuestFeePaid(entry.id)}
-                      >
-                        Marcar pago
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={isSubmittingGuestFee}
+                          onClick={() => void onMarkGuestFeePaid(entry.id)}
+                        >
+                          Marcar pago
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={isSubmittingGuestFee}
+                          onClick={() => void onWaiveGuestFee(entry.id)}
+                        >
+                          Desconsiderar
+                        </button>
+                      </>
                     )}
                   </div>
                 </article>

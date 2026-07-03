@@ -901,6 +901,7 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
                     description=f"Taxa de convidado - {attendance.display_name}",
                     occurred_on=timezone.localdate(),
                     reference_month=timezone.localdate().replace(day=1),
+                    related_player=attendance.invited_by,
                     match=attendance.match,
                     recorded_by=request.user,
                     external_reference=f"guest-fee:{attendance.id}",
@@ -908,6 +909,29 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
                 )
                 attendance.guest_fee_status = MatchAttendance.GuestFeeStatus.PAID
                 attendance.guest_fee_paid_at = timezone.now()
+                attendance.save(update_fields=["guest_fee_status", "guest_fee_paid_at", "updated_at"])
+
+        return Response(self.get_serializer(attendance).data)
+
+    @action(detail=True, methods=["post"], url_path="waive-guest-fee")
+    def waive_guest_fee(self, request, pk=None):
+        attendance = self.get_object()
+        if not attendance.is_guest:
+            raise ValidationError({"detail": "Apenas convidados possuem taxa avulsa."})
+        if attendance.attendance_status != MatchAttendance.AttendanceStatus.CONFIRMED:
+            raise ValidationError({"detail": "A taxa só é cobrada de convidados confirmados."})
+        if attendance.match.status not in FINAL_MATCH_STATUSES:
+            raise ValidationError({"detail": "A taxa do convidado só é finalizada ao fim da pelada."})
+        if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.PAID:
+            raise ValidationError({"detail": "A taxa do convidado ja foi marcada como paga."})
+        if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.WAIVED:
+            return Response(self.get_serializer(attendance).data)
+
+        with transaction.atomic():
+            attendance = MatchAttendance.objects.select_for_update().select_related("match").get(pk=attendance.pk)
+            if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.PENDING:
+                attendance.guest_fee_status = MatchAttendance.GuestFeeStatus.WAIVED
+                attendance.guest_fee_paid_at = None
                 attendance.save(update_fields=["guest_fee_status", "guest_fee_paid_at", "updated_at"])
 
         return Response(self.get_serializer(attendance).data)

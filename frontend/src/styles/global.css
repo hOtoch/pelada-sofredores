@@ -2558,3 +2558,153 @@ select.input-field option:checked {
     align-items: flex-start;
   }
 }
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 0.65rem;
+    gap: 0.65rem;
+  }
+
+  .main-area,
+  .page-section,
+  .glass-card,
+  .toolbar-card,
+  .ledger-card,
+  .dashboard-panel,
+  .dashboard-summary-card,
+  .monthly-fee-card,
+  .guest-fee-row,
+  .attendance-row,
+  .transaction-item {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .top-bar,
+  .toolbar-card,
+  .ledger-card,
+  .dashboard-panel,
+  .dashboard-panel-hero,
+  .dashboard-toolbar-card,
+  .dashboard-ledger-card {
+    padding: 1rem;
+  }
+
+  .section-heading,
+  .toolbar-header,
+  .ledger-heading,
+  .dashboard-evolution-heading {
+    align-items: stretch;
+  }
+
+  .section-actions,
+  .quick-actions,
+  .monthly-fee-actions,
+  .transaction-actions,
+  .guest-fee-actions {
+    width: 100%;
+  }
+
+  .section-actions > button,
+  .quick-actions > button,
+  .monthly-fee-actions > button,
+  .transaction-actions > button,
+  .guest-fee-actions > button,
+  .primary-button,
+  .ghost-button {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .dashboard-summary-grid.card-grid,
+  .card-grid,
+  .toolbar-card,
+  .filter-grid,
+  .monthly-fee-grid,
+  .analytics-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-summary-card {
+    padding: 1rem;
+  }
+
+  .dashboard-summary-card > p:not(.dashboard-summary-note) {
+    font-size: 1.55rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-flow-list,
+  .dashboard-flow-item {
+    width: 100%;
+  }
+
+  .dashboard-flow-item {
+    min-width: 0;
+  }
+
+  .guest-fee-row,
+  .attendance-row,
+  .dashboard-evolution-row,
+  .monthly-fee-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .guest-fee-actions,
+  .attendance-controls,
+  .transaction-meta {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .dashboard-period-select,
+  .dashboard-period-select .input-field,
+  .month-filter,
+  .input-compact {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-evolution-bars {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dashboard-evolution-bar-label {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .analytics-table-shell,
+  .overall-history-chart-shell {
+    max-width: 100%;
+    min-width: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .transaction-item > div,
+  .guest-fee-row > div,
+  .attendance-row > div,
+  .monthly-fee-header > div {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .transaction-item p,
+  .transaction-item small,
+  .guest-fee-row strong,
+  .guest-fee-row p,
+  .attendance-row strong,
+  .attendance-row p,
+  .monthly-fee-card h4,
+  .monthly-fee-card span,
+  .monthly-fee-card strong,
+  .status-chip {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}

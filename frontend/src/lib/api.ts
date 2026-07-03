@@ -112,6 +112,7 @@ type RawAttendance = {
   display_name: string;
   is_guest: boolean;
   invited_by: string | null;
+  invited_by_name?: string | null;
   attendance_status: AttendanceEntry["attendanceStatus"];
   assigned_team_number: number | null;
   assigned_team_name: string;
@@ -467,6 +468,7 @@ function mapAttendance(raw: RawAttendance): AttendanceEntry {
     displayName: raw.display_name,
     isGuest: raw.is_guest,
     invitedById: raw.invited_by,
+    invitedByName: raw.invited_by_name ?? null,
     attendanceStatus: raw.attendance_status,
     assignedTeamNumber: raw.assigned_team_number,
     assignedTeamName: raw.assigned_team_name || undefined,
@@ -1186,6 +1188,15 @@ export async function deleteAttendance(token: string, attendanceId: string) {
 export async function markGuestFeePaid(token: string, attendanceId: string) {
   const data = await request<RawAttendance>(
     `/attendance/${attendanceId}/mark-guest-fee-paid/`,
+    { method: "POST" },
+    token,
+  );
+  return mapAttendance(data);
+}
+
+export async function waiveGuestFee(token: string, attendanceId: string) {
+  const data = await request<RawAttendance>(
+    `/attendance/${attendanceId}/waive-guest-fee/`,
     { method: "POST" },
     token,
   );

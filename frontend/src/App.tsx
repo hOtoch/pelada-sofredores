@@ -85,6 +85,7 @@ import {
   updatePlayer as updatePlayerRequest,
   updateUserAccount as updateUserAccountRequest,
   voidTransaction as voidTransactionRequest,
+  waiveGuestFee as waiveGuestFeeRequest,
 } from "./lib/api";
 
 type NavigationIcon = "finance" | "roster" | "accounts" | "match" | "ratings" | "portal";
@@ -1346,6 +1347,37 @@ export default function App() {
     }
   };
 
+  const handleWaiveGuestFee = async (attendanceId: string) => {
+    if (!token) {
+      return;
+    }
+
+    setIsSubmittingAttendance(true);
+    setScreenError(undefined);
+
+    try {
+      const updated = await waiveGuestFeeRequest(token, attendanceId);
+      const [cashFlow, ledger, nextGuestFeeDebts] = isAdmin
+        ? await fetchFinancialData(token)
+        : [summary, transactions, guestFeeDebts] as const;
+      setAttendance((prev) =>
+        prev.map((entry) => (entry.id === attendanceId ? updated : entry)),
+      );
+      if (isAdmin) {
+        setSummary(cashFlow);
+        setTransactions(ledger);
+        setGuestFeeDebts(nextGuestFeeDebts);
+        await refreshAdminDataState(token);
+      }
+      reportSuccess("Taxa de convidado desconsiderada.");
+    } catch (error) {
+      reportError("Falha ao desconsiderar taxa do convidado.", error);
+      throw error;
+    } finally {
+      setIsSubmittingAttendance(false);
+    }
+  };
+
   const refreshAdminDataState = async (authToken: string) => {
     if (!isAdmin) {
       return;
@@ -1466,6 +1498,9 @@ export default function App() {
   const attendancePlayerIds = new Set(attendance.map((entry) => entry.playerId).filter(Boolean));
   const availablePlayers = players.filter(
     (player) => player.isActive && player.playerType === "MEMBER" && !attendancePlayerIds.has(player.id),
+  );
+  const responsiblePlayers = players.filter(
+    (player) => player.isActive && player.playerType === "MEMBER",
   );
 
   const renderProtected = (element: JSX.Element) => {
@@ -1650,6 +1685,7 @@ export default function App() {
                   onEditTransaction={(transactionId, values) => handleEditTransaction(transactionId, values)}
                   onVoidTransaction={(transactionId) => handleVoidTransaction(transactionId)}
                   onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
+                  onWaiveGuestFee={(attendanceId) => handleWaiveGuestFee(attendanceId)}
                   onOpenLedger={() => null}
                 />
               ) : (
@@ -1728,6 +1764,7 @@ export default function App() {
                 activeSection="match"
                 attendance={attendance}
                 availablePlayers={availablePlayers}
+                responsiblePlayers={responsiblePlayers}
                 generatedTeams={generatedTeams}
                 averageOverallGap={averageOverallGap}
                 isLoading={isPreMatchLoading}
@@ -1753,6 +1790,7 @@ export default function App() {
                 onAddGuest={(values) => handleAddGuest(values)}
                 onRemoveAttendance={(attendanceId) => handleRemoveAttendance(attendanceId)}
                 onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
+                onWaiveGuestFee={(attendanceId) => handleWaiveGuestFee(attendanceId)}
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}
@@ -1772,6 +1810,7 @@ export default function App() {
                 activeSection="ratings"
                 attendance={attendance}
                 availablePlayers={availablePlayers}
+                responsiblePlayers={responsiblePlayers}
                 generatedTeams={generatedTeams}
                 averageOverallGap={averageOverallGap}
                 isLoading={isPreMatchLoading}
@@ -1797,6 +1836,7 @@ export default function App() {
                 onAddGuest={(values) => handleAddGuest(values)}
                 onRemoveAttendance={(attendanceId) => handleRemoveAttendance(attendanceId)}
                 onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
+                onWaiveGuestFee={(attendanceId) => handleWaiveGuestFee(attendanceId)}
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
                 ratingState={matchRatingState}

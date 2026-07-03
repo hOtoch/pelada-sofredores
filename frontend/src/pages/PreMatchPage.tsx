@@ -556,6 +556,7 @@ export function PreMatchPage({
   activeSection = "match",
   attendance,
   availablePlayers,
+  responsiblePlayers,
   generatedTeams,
   averageOverallGap,
   isGeneratingTeams,
@@ -577,6 +578,7 @@ export function PreMatchPage({
   onAddGuest,
   onRemoveAttendance,
   onMarkGuestFeePaid,
+  onWaiveGuestFee,
   onGenerateTeams,
   onClearGeneratedTeams,
   ratingState,
@@ -629,6 +631,14 @@ export function PreMatchPage({
     ? Math.round((activeRatingScore - activeRatingBaseScore) * 10)
     : 0;
   const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
+  const responsiblePlayerOptions = useMemo(
+    () =>
+      responsiblePlayers
+        .filter((player) => player.isActive && player.playerType === "MEMBER")
+        .sort((left, right) => left.fullName.localeCompare(right.fullName)),
+    [responsiblePlayers],
+  );
+  const canSubmitGuest = Boolean(guestValues.displayName.trim() && guestValues.invitedById);
 
   const matchHistory = useMemo(
     () =>
@@ -827,6 +837,9 @@ export function PreMatchPage({
 
   const handleAddGuest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!guestValues.invitedById) {
+      return;
+    }
 
     try {
       await onAddGuest(guestValues);
@@ -1421,6 +1434,22 @@ export function PreMatchPage({
                 />
               </label>
               <label className="form-span-2">
+                Responsável pela cobrança
+                <select
+                  className="input-field"
+                  value={guestValues.invitedById ?? ""}
+                  onChange={handleGuestField("invitedById")}
+                  required
+                >
+                  <option value="">Selecione um jogador do elenco</option>
+                  {responsiblePlayerOptions.map((player) => (
+                    <option key={player.id} value={player.id}>
+                      {player.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-span-2">
                 Observações
                 <textarea
                   className="input-field textarea-field"
@@ -1430,7 +1459,11 @@ export function PreMatchPage({
               </label>
             </div>
             <div className="section-actions">
-              <button type="submit" className="primary-button" disabled={isSubmittingAttendance}>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={isSubmittingAttendance || !canSubmitGuest}
+              >
                 {isSubmittingAttendance ? "Salvando..." : "Adicionar convidado"}
               </button>
             </div>
@@ -1459,18 +1492,31 @@ export function PreMatchPage({
                 <div>
                   <strong>{entry.displayName}</strong>
                   <p className="muted">Taxa de convidado da rodada</p>
+                  <p className="muted">
+                    Responsável: {entry.invitedByName ?? "Nao informado"}
+                  </p>
                 </div>
                 <div className="guest-fee-actions">
                   <strong>{currencyFormatter.format(entry.guestFeeOutstanding)}</strong>
                   {canManageMatch && (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      disabled={isSubmittingAttendance}
-                      onClick={() => void onMarkGuestFeePaid(entry.id)}
-                    >
-                      Marcar pago
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={isSubmittingAttendance}
+                        onClick={() => void onMarkGuestFeePaid(entry.id)}
+                      >
+                        Marcar pago
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={isSubmittingAttendance}
+                        onClick={() => void onWaiveGuestFee(entry.id)}
+                      >
+                        Desconsiderar
+                      </button>
+                    </>
                   )}
                 </div>
               </article>
@@ -1502,6 +1548,8 @@ export function PreMatchPage({
                       Taxa convidado:{" "}
                       {entry.guestFeeStatus === "PAID"
                         ? "paga"
+                        : entry.guestFeeStatus === "WAIVED"
+                          ? "desconsiderada"
                         : entry.guestFeeIsDue
                           ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
                           : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
