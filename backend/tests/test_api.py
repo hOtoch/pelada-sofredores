@@ -643,7 +643,7 @@ class ApiFlowTests(APITestCase):
         self.players[1].refresh_from_db()
         self.assertEqual(self.players[1].overall, original_overall)
 
-    def test_common_user_can_rate_finished_match_without_participation(self) -> None:
+    def test_common_user_can_rate_only_teammates_and_not_self_or_opponents(self) -> None:
         self.common_user.linked_player = self.players[0]
         self.common_user.save(update_fields=["linked_player"])
         other_match = Match.objects.create(
@@ -653,24 +653,87 @@ class ApiFlowTests(APITestCase):
             expected_team_count=2,
             created_by=self.user,
         )
-        other_attendance = MatchAttendance.objects.create(
+        self_attendance = MatchAttendance.objects.create(
+            match=other_match,
+            player=self.players[0],
+            display_name=self.players[0].full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            assigned_team_number=1,
+            assigned_team_name="Time 1",
+            overall=self.players[0].overall,
+        )
+        teammate_attendance = MatchAttendance.objects.create(
             match=other_match,
             player=self.players[1],
             display_name=self.players[1].full_name,
             is_guest=False,
             attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            assigned_team_number=1,
+            assigned_team_name="Time 1",
             overall=self.players[1].overall,
+        )
+        opponent_attendance = MatchAttendance.objects.create(
+            match=other_match,
+            player=self.players[2],
+            display_name=self.players[2].full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            assigned_team_number=2,
+            assigned_team_name="Time 2",
+            overall=self.players[2].overall,
         )
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
 
+        state_response = self.client.get(f"/api/matches/{other_match.id}/player-ratings/")
         response = self.client.post(
             f"/api/matches/{other_match.id}/player-ratings/",
-            {"ratings": [{"attendance_id": str(other_attendance.id), "score": 10}]},
+            {"ratings": [{"attendance_id": str(teammate_attendance.id), "score": 10}]},
+            format="json",
+        )
+        opponent_response = self.client.post(
+            f"/api/matches/{other_match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(opponent_attendance.id), "score": 10}]},
+            format="json",
+        )
+        self_response = self.client.post(
+            f"/api/matches/{other_match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(self_attendance.id), "score": 10}]},
             format="json",
         )
 
+        self.assertEqual(state_response.status_code, 200)
+        self.assertTrue(state_response.data["can_rate"])
+        self.assertEqual(
+            [item["attendance_id"] for item in state_response.data["items"]],
+            [str(teammate_attendance.id)],
+        )
+        self.assertNotIn(str(self_attendance.id), [item["attendance_id"] for item in state_response.data["items"]])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(MatchPlayerRating.objects.filter(match=other_match, rater_user=self.common_user).count(), 1)
+        self.assertEqual(opponent_response.status_code, 400)
+        self.assertEqual(self_response.status_code, 400)
+
+    def test_common_user_with_linked_player_without_generated_team_cannot_rate(self) -> None:
+        self.common_user.linked_player = self.players[0]
+        self.common_user.save(update_fields=["linked_player"])
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.save(update_fields=["status", "archived_at"])
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=self.players[1])
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        state_response = self.client.get(f"/api/matches/{self.match.id}/player-ratings/")
+        submit_response = self.client.post(
+            f"/api/matches/{self.match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(target_attendance.id), "score": 8}]},
+            format="json",
+        )
+
+        self.assertEqual(state_response.status_code, 200)
+        self.assertFalse(state_response.data["can_rate"])
+        self.assertIn("time gerado", state_response.data["locked_reason"])
+        self.assertEqual(submit_response.status_code, 400)
 
     def test_rating_window_finalizes_overall_and_returns_empty_state_after_24_hours(self) -> None:
         self.match.status = Match.Status.ARCHIVED
@@ -811,16 +874,16 @@ class ApiFlowTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         target_player.refresh_from_db()
-        self.assertEqual(target_player.overall, 74)
+        self.assertEqual(target_player.overall, 76)
         summary_entry = next(
             item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
         )
         self.assertEqual(summary_entry["previous_overall"], 70)
-        self.assertEqual(summary_entry["current_overall"], 74)
-        self.assertEqual(summary_entry["delta"], 4)
-        self.assertEqual(summary_entry["average_score"], "8.00")
+        self.assertEqual(summary_entry["current_overall"], 76)
+        self.assertEqual(summary_entry["delta"], 6)
+        self.assertEqual(summary_entry["average_score"], "8.33")
 
-    def test_rating_finalization_trims_outliers_and_rounds_final_score_up(self) -> None:
+    def test_rating_finalization_uses_all_votes_and_rounds_final_score_up(self) -> None:
         target_player = self.players[1]
         target_player.overall = 60
         target_player.save(update_fields=["overall"])
@@ -865,13 +928,13 @@ class ApiFlowTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         target_player.refresh_from_db()
-        self.assertEqual(target_player.overall, 63)
+        self.assertEqual(target_player.overall, 60)
         summary_entry = next(
             item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
         )
-        self.assertEqual(summary_entry["average_score"], "6.30")
+        self.assertEqual(summary_entry["average_score"], "5.90")
         self.assertEqual(summary_entry["rating_count"], 4)
-        self.assertEqual(summary_entry["current_overall"], 63)
+        self.assertEqual(summary_entry["current_overall"], 60)
 
     def test_excellent_match_rating_can_move_high_overall_player_more_than_two_points(self) -> None:
         target_player = self.players[1]

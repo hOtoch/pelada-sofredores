@@ -47,6 +47,10 @@ UNLINKED_RATING_LOCK_REASON = (
     "Sua conta ainda nao esta vinculada a um jogador. "
     "Procure um administrador para validar sua conta."
 )
+MISSING_TEAM_RATING_LOCK_REASON = (
+    "Seu jogador vinculado nao possui time gerado nesta pelada. "
+    "A votacao fica disponivel apenas para jogadores do mesmo time."
+)
 
 
 def month_bounds(reference_date: date) -> tuple[date, date]:
@@ -170,13 +174,12 @@ def clamp_overall_delta(value: Decimal) -> Decimal:
     return max(-RATING_MAX_OVERALL_DELTA, min(RATING_MAX_OVERALL_DELTA, value))
 
 
-def get_trimmed_rating_average(scores: list[Decimal]) -> Decimal | None:
+def get_rating_average(scores: list[Decimal]) -> Decimal | None:
     if not scores:
         return None
 
-    sorted_scores = sorted(Decimal(str(score)) for score in scores)
-    ratings_for_average = sorted_scores[1:-1] if len(sorted_scores) >= 3 else sorted_scores
-    return sum(ratings_for_average, Decimal("0")) / Decimal(len(ratings_for_average))
+    ratings = [Decimal(str(score)) for score in scores]
+    return sum(ratings, Decimal("0")) / Decimal(len(ratings))
 
 
 def get_final_rating_score(rating_average: Decimal) -> Decimal:
@@ -197,7 +200,7 @@ def get_match_rating_stats(match: Match) -> dict:
         stats["rating_count"] += 1
 
     for stats in rating_stats.values():
-        stats["average_score"] = get_trimmed_rating_average(stats["scores"])
+        stats["average_score"] = get_rating_average(stats["scores"])
         del stats["scores"]
 
     return rating_stats
@@ -206,7 +209,7 @@ def get_match_rating_stats(match: Match) -> dict:
 def recalculate_player_overall_from_match_ratings(
     player: Player, match: Match, *, base_overall: int | None = None
 ) -> None:
-    rating_average = get_trimmed_rating_average(
+    rating_average = get_rating_average(
         list(
             MatchPlayerRating.objects.filter(match=match, rated_player=player).values_list(
                 "score", flat=True
@@ -647,6 +650,25 @@ class MatchViewSet(viewsets.ModelViewSet):
             )
         return rating_log
 
+    def _get_rating_participants_queryset(self, match):
+        return match.attendance_entries.select_related("player").filter(
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            player__isnull=False,
+        )
+
+    def _get_teammate_rating_queryset(self, match, linked_player):
+        participants_queryset = self._get_rating_participants_queryset(match)
+        linked_attendance = participants_queryset.filter(player=linked_player).first()
+        if not linked_attendance or linked_attendance.assigned_team_number is None:
+            return participants_queryset.none(), MISSING_TEAM_RATING_LOCK_REASON
+
+        return (
+            participants_queryset.filter(
+                assigned_team_number=linked_attendance.assigned_team_number,
+            ).exclude(player=linked_player),
+            "",
+        )
+
     def _build_rating_state(self, match):
         finalize_match_ratings_if_due(match)
         match.refresh_from_db(fields=["ratings_finalized_at"])
@@ -682,17 +704,25 @@ class MatchViewSet(viewsets.ModelViewSet):
             }
             return MatchPlayerRatingStateSerializer(payload).data
 
-        participants_queryset = match.attendance_entries.select_related("player").filter(
-            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
-            player__isnull=False,
-        )
+        participants_queryset = self._get_rating_participants_queryset(match)
         if linked_player:
-            participants_queryset = participants_queryset.exclude(player=linked_player)
+            participants_queryset, teammate_locked_reason = self._get_teammate_rating_queryset(
+                match,
+                linked_player,
+            )
+            if can_rate and teammate_locked_reason:
+                locked_reason = teammate_locked_reason
+                can_rate = False
 
         participants = list(participants_queryset.order_by("display_name"))
+        participant_ids = [entry.id for entry in participants]
         rating_by_attendance = {
             rating.rated_attendance_id: rating
-            for rating in MatchPlayerRating.objects.filter(match=match, rater_user=self.request.user)
+            for rating in MatchPlayerRating.objects.filter(
+                match=match,
+                rater_user=self.request.user,
+                rated_attendance_id__in=participant_ids,
+            )
         }
 
         items = []
@@ -748,11 +778,12 @@ class MatchViewSet(viewsets.ModelViewSet):
         serializer = MatchPlayerRatingSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        allowed_entries_queryset = match.attendance_entries.select_related("player").filter(
-            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
-            player__isnull=False,
+        allowed_entries_queryset, teammate_locked_reason = self._get_teammate_rating_queryset(
+            match,
+            linked_player,
         )
-        allowed_entries_queryset = allowed_entries_queryset.exclude(player=linked_player)
+        if teammate_locked_reason:
+            raise ValidationError({"detail": teammate_locked_reason})
 
         allowed_entries = {entry.id: entry for entry in allowed_entries_queryset}
         with transaction.atomic():
@@ -761,7 +792,7 @@ class MatchViewSet(viewsets.ModelViewSet):
                 attendance_entry = allowed_entries.get(attendance_id)
                 if not attendance_entry:
                     raise ValidationError(
-                        {"ratings": "Avalie apenas mensalistas confirmados desta pelada."}
+                        {"ratings": "Avalie apenas jogadores do mesmo time do seu jogador vinculado."}
                     )
                 MatchPlayerRating.objects.update_or_create(
                     match=match,
