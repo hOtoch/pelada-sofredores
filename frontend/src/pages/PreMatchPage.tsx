@@ -665,27 +665,8 @@ export function PreMatchPage({
       ratingState?.ratingsFinalizedAt &&
       ratingItems.length === 0,
   );
-  const selectedRatingWindowClosesAt = ratingState?.windowClosesAt
-    ? Date.parse(ratingState.windowClosesAt)
-    : null;
-  const selectedRatingWindowIsOpen = Boolean(
-    activeSection === "ratings" &&
-      match?.status === "ARCHIVED" &&
-      !ratingState?.ratingsFinalizedAt &&
-      selectedRatingWindowClosesAt !== null &&
-      Number.isFinite(selectedRatingWindowClosesAt) &&
-      Date.now() < selectedRatingWindowClosesAt,
-  );
-  const shouldShowRatingArena = Boolean(
-    ratingState &&
-      (selectedRatingWindowIsOpen ||
-        ratingItems.length > 0 ||
-        ratingLogEntries.length > 0 ||
-        overallSummary.length > 0),
-  );
   const shouldShowOverallHistory =
     activeSection === "ratings" &&
-    !shouldShowRatingArena &&
     (!hasOpenRatingWindow || selectedRatingWindowIsClosed);
   const ratingLogRaterOptions = useMemo(() => {
     const options = new Map<string, string>();
@@ -1652,10 +1633,11 @@ export function PreMatchPage({
             </button>
           </div>
 
-          {shouldShowOverallHistory ? (
+          {shouldShowOverallHistory && (
             <OverallHistoryPanel overallHistory={overallHistory} />
-          ) : (
-            <div className="rating-arena glass-card">
+          )}
+
+          <div className="rating-arena glass-card">
           <div className="ledger-heading rating-arena-heading">
             <div>
               <p className="eyebrow">Pós-jogo</p>
@@ -1986,7 +1968,6 @@ export function PreMatchPage({
             </>
           )}
             </div>
-          )}
         </>
       )}
 
