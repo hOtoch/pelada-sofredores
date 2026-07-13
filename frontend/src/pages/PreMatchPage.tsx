@@ -226,10 +226,19 @@ function OverallHistoryPanel({
 
     const series = players
       .map((player, playerIndex) => {
-        const values = matches.map(
+        const rawValues = matches.map(
           (historyMatch) =>
             overallByMatchAndPlayer.get(`${historyMatch.matchId}:${player.playerId}`) ?? null,
         );
+        let lastKnownOverall: number | null = null;
+        const values = rawValues.map((value) => {
+          if (value !== null) {
+            lastKnownOverall = value;
+            return value;
+          }
+
+          return lastKnownOverall;
+        });
         const presentValues = values.filter((value): value is number => value !== null);
         const lastOverall = presentValues[presentValues.length - 1] ?? null;
 
