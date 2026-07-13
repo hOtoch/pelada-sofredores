@@ -618,7 +618,7 @@ export function RosterPage({
                   type="email"
                   value={accountFormValues.email}
                   onChange={handleAccountFieldChange("email")}
-                  required
+                  required={accountEditorMode === "create"}
                 />
               </label>
               <label>

@@ -249,7 +249,7 @@ export function AccountsPage({
                   type="email"
                   value={formValues.email}
                   onChange={handleFieldChange("email")}
-                  required
+                  required={editorMode === "create"}
                 />
               </label>
               <label>

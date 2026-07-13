@@ -43,6 +43,10 @@ from .serializers import (
 
 GUEST_FEE_AMOUNT = Decimal("14.00")
 FINAL_MATCH_STATUSES = [Match.Status.CLOSED, Match.Status.ARCHIVED]
+UNLINKED_RATING_LOCK_REASON = (
+    "Sua conta ainda nao esta vinculada a um jogador. "
+    "Procure um administrador para validar sua conta."
+)
 
 
 def month_bounds(reference_date: date) -> tuple[date, date]:
@@ -651,6 +655,13 @@ class MatchViewSet(viewsets.ModelViewSet):
         overall_summary = self._build_rating_overall_summary(match, rating_stats)
         rating_log = self._build_rating_log(match)
         locked_reason = self._get_rating_lock_reason(match)
+        linked_player = getattr(self.request.user, "linked_player", None)
+        if (
+            getattr(self.request.user, "role", None) != Role.ADMIN
+            and not locked_reason
+            and not linked_player
+        ):
+            locked_reason = UNLINKED_RATING_LOCK_REASON
         can_rate = bool(getattr(self.request.user, "role", None) != Role.ADMIN and not locked_reason)
         is_window_closed = bool(
             match.status == Match.Status.ARCHIVED
@@ -675,7 +686,6 @@ class MatchViewSet(viewsets.ModelViewSet):
             attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
             player__isnull=False,
         )
-        linked_player = getattr(self.request.user, "linked_player", None)
         if linked_player:
             participants_queryset = participants_queryset.exclude(player=linked_player)
 
@@ -731,6 +741,10 @@ class MatchViewSet(viewsets.ModelViewSet):
         if locked_reason:
             raise ValidationError({"detail": locked_reason or "Avaliação indisponível."})
 
+        linked_player = getattr(request.user, "linked_player", None)
+        if not linked_player:
+            raise ValidationError({"detail": UNLINKED_RATING_LOCK_REASON})
+
         serializer = MatchPlayerRatingSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -738,9 +752,7 @@ class MatchViewSet(viewsets.ModelViewSet):
             attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
             player__isnull=False,
         )
-        linked_player = getattr(request.user, "linked_player", None)
-        if linked_player:
-            allowed_entries_queryset = allowed_entries_queryset.exclude(player=linked_player)
+        allowed_entries_queryset = allowed_entries_queryset.exclude(player=linked_player)
 
         allowed_entries = {entry.id: entry for entry in allowed_entries_queryset}
         with transaction.atomic():

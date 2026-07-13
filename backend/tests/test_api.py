@@ -620,7 +620,7 @@ class ApiFlowTests(APITestCase):
         self.assertIn(str(closed_match.id), [item["id"] for item in matches_response.data])
         self.assertTrue(all(item["status"] != Match.Status.DRAFT for item in matches_response.data))
 
-    def test_common_user_can_rate_archived_match_without_linked_player_and_keep_overall_pending(self) -> None:
+    def test_common_user_without_linked_player_cannot_rate_archived_match(self) -> None:
         self.match.status = Match.Status.ARCHIVED
         self.match.archived_at = timezone.now()
         self.match.save(update_fields=["status", "archived_at"])
@@ -636,25 +636,16 @@ class ApiFlowTests(APITestCase):
         )
 
         self.assertEqual(state_response.status_code, 200)
-        self.assertTrue(state_response.data["can_rate"])
-        self.assertIn(str(self.players[0].id), [item["player_id"] for item in state_response.data["items"]])
-        self.assertEqual(submit_response.status_code, 200)
-        self.assertTrue(submit_response.data["has_submitted"])
-        self.assertEqual(submit_response.data["log"][0]["rater_user_id"], str(self.common_user.id))
-        self.assertEqual(submit_response.data["log"][0]["rater_display_name"], self.common_user.display_name)
-        self.assertEqual(submit_response.data["log"][0]["rated_display_name"], target_attendance.display_name)
-        self.assertEqual(submit_response.data["log"][0]["score"], "6.5")
-        rated_item = next(
-            item for item in submit_response.data["items"] if item["attendance_id"] == str(target_attendance.id)
-        )
-        self.assertEqual(rated_item["average_score"], "6.50")
-        stored_rating = MatchPlayerRating.objects.get(match=self.match, rater_user=self.common_user)
-        self.assertEqual(stored_rating.score, Decimal("6.5"))
-        self.assertEqual(MatchPlayerRating.objects.filter(match=self.match, rater_user=self.common_user).count(), 1)
+        self.assertFalse(state_response.data["can_rate"])
+        self.assertIn("Procure um administrador", state_response.data["locked_reason"])
+        self.assertEqual(submit_response.status_code, 400)
+        self.assertEqual(MatchPlayerRating.objects.filter(match=self.match, rater_user=self.common_user).count(), 0)
         self.players[1].refresh_from_db()
         self.assertEqual(self.players[1].overall, original_overall)
 
     def test_common_user_can_rate_finished_match_without_participation(self) -> None:
+        self.common_user.linked_player = self.players[0]
+        self.common_user.save(update_fields=["linked_player"])
         other_match = Match.objects.create(
             scheduled_at=timezone.now() - timedelta(days=1),
             status=Match.Status.ARCHIVED,
