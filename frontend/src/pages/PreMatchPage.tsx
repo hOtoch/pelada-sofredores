@@ -1636,28 +1636,6 @@ export function PreMatchPage({
         </>
       ) : (
         <>
-          <div className="rating-fixed-actions">
-            <div>
-              <p className="eyebrow">Pós-jogo</p>
-              <strong>Overalls atualizados</strong>
-              <small className="muted">
-                {ratingState?.ratingsFinalizedAt
-                  ? `Finalizadas em ${formatDateTime(ratingState.ratingsFinalizedAt)}`
-                  : "A exportação fica disponível após finalizar a janela."}
-              </small>
-            </div>
-            {canManageMatch && (
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={!canExportOverallImage || isRecalculatingRatings}
-                onClick={handleExportOverallImage}
-              >
-                Exportar imagem
-              </button>
-            )}
-          </div>
-
           {shouldShowOverallHistory && (
             <OverallHistoryPanel overallHistory={overallHistory} />
           )}
@@ -1682,6 +1660,16 @@ export function PreMatchPage({
                 </span>
                 <small>cards completos</small>
               </div>
+              {canManageMatch && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={!canExportOverallImage || isRecalculatingRatings}
+                  onClick={handleExportOverallImage}
+                >
+                  Exportar imagem
+                </button>
+              )}
               {canManageMatch && (
                 <button
                   type="button"

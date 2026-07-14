@@ -1586,9 +1586,11 @@ export default function App() {
       <main className="main-area">
         {!isLoginRoute && currentUser && (
           <header className="top-bar">
-            <div className="top-bar-copy">
-              <strong className="top-bar-title">{currentNavItem?.label ?? "Peladinhas Sofredores"}</strong>
-            </div>
+            {location.pathname !== "/ratings" ? (
+              <div className="top-bar-copy">
+                <strong className="top-bar-title">{currentNavItem?.label ?? "Peladinhas Sofredores"}</strong>
+              </div>
+            ) : null}
             <div className="top-bar-pill">
               <span>Bem-vindo, {currentUserName}</span>
               <span className="dot" />
