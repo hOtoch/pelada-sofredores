@@ -20,6 +20,7 @@ import type {
   PersonalFinanceSnapshot,
   UpcomingMatchSnapshot,
 } from "../features/profile/contracts";
+import type { AccountProfileFormValues } from "../features/auth/contracts";
 import type { GuestFormValues, MatchFormValues } from "../features/pre-match/contracts";
 import type { TransactionFormValues } from "../features/dashboard/contracts";
 import type {
@@ -673,6 +674,23 @@ export async function registerAccount(values: {
 
 export async function getMe(token: string) {
   const data = await request<RawUser>("/auth/me/", undefined, token);
+  return mapUser(data);
+}
+
+export async function updateMyAccount(token: string, values: AccountProfileFormValues) {
+  const data = await request<RawUser>(
+    "/auth/me/",
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        username: values.username,
+        display_name: values.displayName,
+        email: values.email,
+        phone_number: values.phoneNumber,
+      }),
+    },
+    token,
+  );
   return mapUser(data);
 }
 

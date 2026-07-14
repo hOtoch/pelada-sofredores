@@ -23,6 +23,13 @@ export interface SignupFormValues {
   password: string;
 }
 
+export interface AccountProfileFormValues {
+  username: string;
+  displayName: string;
+  email: string;
+  phoneNumber: string;
+}
+
 export interface SessionSummaryProps {
   user: AuthenticatedUser;
   onLogout: () => void;

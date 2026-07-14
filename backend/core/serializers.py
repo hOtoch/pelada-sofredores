@@ -15,6 +15,13 @@ def normalize_phone(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
 
+def normalize_username(value: str) -> str:
+    normalized = value.strip()
+    if re.search(r"\s", normalized):
+        raise serializers.ValidationError("O usuario nao pode conter espacos.")
+    return normalized
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -55,6 +62,15 @@ class UserAccountSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "must_change_password": {"required": False},
         }
+
+    def validate_username(self, value):
+        normalized = normalize_username(value)
+        queryset = User.objects.filter(username__iexact=normalized)
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Este usuario ja esta em uso.")
+        return normalized
 
     def create(self, validated_data):
         password = validated_data.pop("password", "")
@@ -126,7 +142,7 @@ class PublicSignupSerializer(serializers.Serializer):
         return normalized
 
     def validate_username(self, value):
-        normalized = value.strip()
+        normalized = normalize_username(value)
         if User.objects.filter(username__iexact=normalized).exists():
             raise serializers.ValidationError("Este usuário já está em uso.")
         return normalized
@@ -175,6 +191,40 @@ class ChangePasswordSerializer(serializers.Serializer):
 
         validate_password(new_password, user=user)
         return attrs
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            "username",
+            "email",
+            "display_name",
+            "phone_number",
+        )
+        extra_kwargs = {
+            "username": {"required": True},
+            "email": {"required": False, "allow_blank": True},
+            "display_name": {"required": False, "allow_blank": True},
+            "phone_number": {"required": False, "allow_blank": True},
+        }
+
+    def validate_username(self, value):
+        normalized = normalize_username(value)
+        queryset = User.objects.filter(username__iexact=normalized).exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Este usuario ja esta em uso.")
+        return normalized
+
+    def validate_phone_number(self, value):
+        normalized = normalize_phone(value)
+        if not normalized:
+            return ""
+        if len(normalized) < 10:
+            raise serializers.ValidationError("Informe um celular valido.")
+        if User.objects.filter(phone_number=normalized).exclude(pk=self.instance.pk).exists():
+            raise serializers.ValidationError("Este celular ja esta em uso.")
+        return normalized
 
 
 class PlayerSerializer(serializers.ModelSerializer):

@@ -17,6 +17,8 @@ const initialSignupValues: SignupFormValues = {
   password: "",
 };
 
+const hasUsernameSpace = (value: string) => /\s/.test(value.trim());
+
 export function LoginPage({
   isSubmitting,
   isCreatingAccount = false,
@@ -29,6 +31,7 @@ export function LoginPage({
   const [values, setValues] = useState(initialValues);
   const [signupValues, setSignupValues] = useState(initialSignupValues);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
+  const [localSignupError, setLocalSignupError] = useState<string>();
   const id = useId();
 
   const handleChange =
@@ -39,6 +42,7 @@ export function LoginPage({
 
   const handleSignupChange =
     (field: keyof SignupFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
+      setLocalSignupError(undefined);
       setSignupValues((prev) => ({ ...prev, [field]: event.target.value }));
     };
 
@@ -52,8 +56,15 @@ export function LoginPage({
     if (!onCreateAccount) {
       return;
     }
+    if (hasUsernameSpace(signupValues.username)) {
+      setLocalSignupError("O usuario nao pode conter espacos.");
+      return;
+    }
     try {
-      await onCreateAccount(signupValues);
+      await onCreateAccount({
+        ...signupValues,
+        username: signupValues.username.trim(),
+      });
     } catch {
       // Parent state renders the API error inside the modal.
     }
@@ -105,7 +116,14 @@ export function LoginPage({
             {isSubmitting ? "Validando..." : "Entrar"}
           </button>
           {canCreateAccount && (
-            <button type="button" className="ghost-button" onClick={() => setIsSignupOpen(true)}>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setLocalSignupError(undefined);
+                setIsSignupOpen(true);
+              }}
+            >
               Criar minha conta
             </button>
           )}
@@ -117,7 +135,14 @@ export function LoginPage({
           <div className="modal-card glass-card login-signup-modal">
             <div className="ledger-heading">
               <h3>Criar minha conta</h3>
-              <button type="button" className="ghost-button" onClick={() => setIsSignupOpen(false)}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setLocalSignupError(undefined);
+                  setIsSignupOpen(false);
+                }}
+              >
                 Fechar
               </button>
             </div>
@@ -164,9 +189,18 @@ export function LoginPage({
                   required
                 />
               </label>
-              {signupErrorMessage && <p className="error-text form-span-2">{signupErrorMessage}</p>}
+              {(localSignupError || signupErrorMessage) && (
+                <p className="error-text form-span-2">{localSignupError || signupErrorMessage}</p>
+              )}
               <div className="section-actions form-span-2">
-                <button type="button" className="ghost-button" onClick={() => setIsSignupOpen(false)}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    setLocalSignupError(undefined);
+                    setIsSignupOpen(false);
+                  }}
+                >
                   Cancelar
                 </button>
                 <button type="submit" className="primary-button" disabled={isCreatingAccount}>

@@ -134,6 +134,23 @@ class ApiFlowTests(APITestCase):
         self.assertIsNone(created_user.linked_player)
         self.assertFalse(Player.objects.filter(full_name="Novo Jogador").exists())
 
+    def test_public_signup_rejects_username_with_spaces(self) -> None:
+        self.client.credentials()
+
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "full_name": "Novo Jogador",
+                "phone_number": "(27) 98888-7777",
+                "username": "novo jogador",
+                "password": "SenhaNova123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("username", response.data)
+
     def test_public_signup_allows_phone_from_existing_player(self) -> None:
         self.client.credentials()
         self.players[0].phone_number = "27988887777"
@@ -154,6 +171,55 @@ class ApiFlowTests(APITestCase):
         created_user = User.objects.get(username="conta_jogador")
         self.assertIsNone(created_user.linked_player)
         self.assertEqual(Player.objects.filter(phone_number="27988887777").count(), 1)
+
+    def test_current_user_can_update_profile(self) -> None:
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        response = self.client.patch(
+            "/api/auth/me/",
+            {
+                "username": "comum_editado",
+                "display_name": "Jogador Atualizado",
+                "email": "jogador.atualizado@pelada.local",
+                "phone_number": "(27) 97777-1111",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["username"], "comum_editado")
+        self.assertEqual(response.data["display_name"], "Jogador Atualizado")
+        self.assertEqual(response.data["phone_number"], "27977771111")
+
+    def test_current_user_profile_rejects_username_with_spaces(self) -> None:
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"username": "comum editado"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("username", response.data)
+
+    def test_admin_account_creation_rejects_username_with_spaces(self) -> None:
+        response = self.client.post(
+            "/api/users/",
+            {
+                "username": "novo admin",
+                "email": "novo.admin@pelada.local",
+                "display_name": "Novo Admin",
+                "role": Role.ADMIN,
+                "is_active": True,
+                "must_change_password": True,
+                "password": "SenhaNova123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("username", response.data)
 
     def test_financial_summary_endpoint(self) -> None:
         response = self.client.get("/api/dashboard/financial-summary/")
@@ -196,7 +262,7 @@ class ApiFlowTests(APITestCase):
         )
 
         self.assertEqual(created_response.status_code, 201)
-        self.assertEqual(created_response.data["invited_by"], str(self.players[0].id))
+        self.assertEqual(str(created_response.data["invited_by"]), str(self.players[0].id))
         self.assertEqual(created_response.data["invited_by_name"], self.players[0].full_name)
 
     def test_guest_fee_is_registered_as_pending_after_match_ends_and_can_be_paid(self) -> None:

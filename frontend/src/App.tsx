@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { AccountsPage } from "./pages/AccountsPage";
 import { CommonUserPortalPage } from "./pages/CommonUserPortalPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MyAccountPage } from "./pages/MyAccountPage";
 import { PreMatchPage } from "./pages/PreMatchPage";
 import { RosterPage } from "./pages/RosterPage";
 import type { TransactionFormValues } from "./features/dashboard/contracts";
@@ -33,7 +34,7 @@ import type {
   RecentTeamSnapshot,
   UpcomingMatchSnapshot,
 } from "./features/profile/contracts";
-import type { SignupFormValues } from "./features/auth/contracts";
+import type { AccountProfileFormValues, SignupFormValues } from "./features/auth/contracts";
 import type { GuestFormValues, MatchFormValues } from "./features/pre-match/contracts";
 import type {
   AccessAccountFormValues,
@@ -81,6 +82,7 @@ import {
   createUserAccount as createUserAccountRequest,
   submitMatchPlayerRatings,
   updateMatch as updateMatchRequest,
+  updateMyAccount,
   updateTransaction as updateTransactionRequest,
   updatePlayer as updatePlayerRequest,
   updateUserAccount as updateUserAccountRequest,
@@ -88,7 +90,7 @@ import {
   waiveGuestFee as waiveGuestFeeRequest,
 } from "./lib/api";
 
-type NavigationIcon = "finance" | "roster" | "accounts" | "match" | "ratings" | "portal";
+type NavigationIcon = "finance" | "roster" | "accounts" | "match" | "ratings" | "portal" | "my-account";
 
 type NavigationItem = {
   label: string;
@@ -102,6 +104,7 @@ const adminNavigation: NavigationItem[] = [
   { label: "Contas", path: "/accounts", icon: "accounts" },
   { label: "Pré-Jogo", path: "/pre-match", icon: "match" },
   { label: "Notas", path: "/ratings", icon: "ratings" },
+  { label: "Minha conta", path: "/my-account", icon: "my-account" },
 ];
 
 const commonNavigation: NavigationItem[] = [
@@ -109,6 +112,7 @@ const commonNavigation: NavigationItem[] = [
   { label: "Elenco", path: "/roster", icon: "roster" },
   { label: "Peladas", path: "/pre-match", icon: "match" },
   { label: "Notas", path: "/ratings", icon: "ratings" },
+  { label: "Minha conta", path: "/my-account", icon: "my-account" },
 ];
 
 const emptyCashFlow: CashFlowSummary = {
@@ -210,10 +214,12 @@ function SidebarNavIcon({ icon }: { icon: NavigationIcon }) {
         </svg>
       );
     case "portal":
+    case "my-account":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="12" cy="8.3" r="2.9" />
           <path d="M6.1 18.2c.8-2.7 3.14-4.5 5.9-4.5 2.74 0 5.06 1.8 5.86 4.5" />
+          {icon === "my-account" ? <path d="M17.9 8.1h2.2M19 7v2.2" /> : null}
         </svg>
       );
     case "match":
@@ -357,14 +363,10 @@ export default function App() {
   const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
   const [isSubmittingRoster, setIsSubmittingRoster] = useState(false);
   const [isSubmittingAccount, setIsSubmittingAccount] = useState(false);
+  const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
   const [rosterFilters, setRosterFilters] = useState<PlayerFilterState>(defaultRosterFilters);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [passwordChangeError, setPasswordChangeError] = useState<string>();
-  const [currentPasswordValue, setCurrentPasswordValue] = useState("");
-  const [newPasswordValue, setNewPasswordValue] = useState("");
-  const [confirmPasswordValue, setConfirmPasswordValue] = useState("");
 
   const fetchFinancialData = async (authToken: string) =>
     Promise.all([
@@ -468,7 +470,6 @@ export default function App() {
       setPortalFinance(emptyPortalFinance);
       setPortalRecentAttendance([]);
       setPortalUpcomingMatches([]);
-      setIsPasswordModalOpen(false);
       setIsAuthLoading(false);
       return;
     }
@@ -602,21 +603,6 @@ export default function App() {
   }, [currentUser, token]);
 
   useEffect(() => {
-    if (!currentUser) {
-      setIsPasswordModalOpen(false);
-      setPasswordChangeError(undefined);
-      setCurrentPasswordValue("");
-      setNewPasswordValue("");
-      setConfirmPasswordValue("");
-      return;
-    }
-
-    if (currentUser.mustChangePassword) {
-      setIsPasswordModalOpen(true);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
     if (!token || !currentMatch) {
       setAttendance([]);
       setGeneratedTeams([]);
@@ -699,7 +685,14 @@ export default function App() {
       localStorage.setItem(AUTH_TOKEN_KEY, session.token);
       setToken(session.token);
       setCurrentUser(session.user);
-      navigate(session.user.role === "COMMON" ? "/portal" : "/dashboard", { replace: true });
+      navigate(
+        session.user.mustChangePassword
+          ? "/my-account"
+          : session.user.role === "COMMON"
+            ? "/portal"
+            : "/dashboard",
+        { replace: true },
+      );
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "Falha ao autenticar.");
     } finally {
@@ -717,7 +710,7 @@ export default function App() {
       localStorage.setItem(AUTH_TOKEN_KEY, session.token);
       setToken(session.token);
       setCurrentUser(session.user);
-      navigate("/portal", { replace: true });
+      navigate(session.user.mustChangePassword ? "/my-account" : "/portal", { replace: true });
     } catch (error) {
       setSignupError(error instanceof Error ? error.message : "Falha ao criar conta.");
       throw error;
@@ -746,11 +739,6 @@ export default function App() {
     setPortalFinance(emptyPortalFinance);
     setPortalRecentAttendance([]);
     setPortalUpcomingMatches([]);
-    setIsPasswordModalOpen(false);
-    setPasswordChangeError(undefined);
-    setCurrentPasswordValue("");
-    setNewPasswordValue("");
-    setConfirmPasswordValue("");
     setMatches([]);
     setCurrentMatch(null);
     setAttendance([]);
@@ -1421,49 +1409,53 @@ export default function App() {
     }
   };
 
-  const closePasswordModal = () => {
-    if (currentUser?.mustChangePassword) {
-      return;
-    }
-
-    setIsPasswordModalOpen(false);
-    setPasswordChangeError(undefined);
-    setCurrentPasswordValue("");
-    setNewPasswordValue("");
-    setConfirmPasswordValue("");
-  };
-
-  const handlePasswordChange = async () => {
+  const handleUpdateMyAccount = async (values: AccountProfileFormValues) => {
     if (!token) {
       return;
     }
 
-    if (!currentPasswordValue || !newPasswordValue) {
-      setPasswordChangeError("Preencha a senha atual e a nova senha.");
-      return;
-    }
+    setIsSubmittingProfile(true);
 
-    if (newPasswordValue !== confirmPasswordValue) {
-      setPasswordChangeError("A confirmacao da senha precisa ser igual a nova senha.");
+    try {
+      const updatedUser = await updateMyAccount(token, values);
+      setCurrentUser(updatedUser);
+      setAccounts((prev) =>
+        prev.map((account) =>
+          account.id === updatedUser.id
+            ? {
+                ...account,
+                username: updatedUser.username,
+                email: updatedUser.email,
+                displayName: updatedUser.displayName,
+              }
+            : account,
+        ),
+      );
+      reportSuccess("Dados da conta atualizados.");
+    } catch (error) {
+      reportError("Falha ao atualizar seus dados.", error);
+      throw error;
+    } finally {
+      setIsSubmittingProfile(false);
+    }
+  };
+
+  const handleAccountPasswordChange = async (currentPassword: string, newPassword: string) => {
+    if (!token) {
       return;
     }
 
     setIsChangingPassword(true);
-    setPasswordChangeError(undefined);
 
     try {
-      const session = await changePassword(token, currentPasswordValue, newPasswordValue);
+      const session = await changePassword(token, currentPassword, newPassword);
       localStorage.setItem(AUTH_TOKEN_KEY, session.token);
       setToken(session.token);
       setCurrentUser(session.user);
-      setIsPasswordModalOpen(false);
-      setCurrentPasswordValue("");
-      setNewPasswordValue("");
-      setConfirmPasswordValue("");
       reportSuccess("Senha atualizada com sucesso.");
     } catch (error) {
-      setPasswordChangeError(error instanceof Error ? error.message : "Falha ao trocar a senha.");
-      pushToast("error", error instanceof Error ? error.message : "Falha ao trocar a senha.");
+      reportError("Falha ao trocar a senha.", error);
+      throw error;
     } finally {
       setIsChangingPassword(false);
     }
@@ -1595,7 +1587,6 @@ export default function App() {
         {!isLoginRoute && currentUser && (
           <header className="top-bar">
             <div className="top-bar-copy">
-              <p className="eyebrow">{isAdmin ? "Central de comando" : "Portal do jogador"}</p>
               <strong className="top-bar-title">{currentNavItem?.label ?? "Peladinhas Sofredores"}</strong>
             </div>
             <div className="top-bar-pill">
@@ -1609,20 +1600,13 @@ export default function App() {
               <span className={`top-meta-chip ${isAdmin ? "accent" : ""}`}>
                 {roleLabels[currentUser.role]}
               </span>
-              <button
-                type="button"
-                className={currentUser.mustChangePassword ? "primary-button" : "ghost-button"}
-                onClick={() => setIsPasswordModalOpen(true)}
-              >
-                {currentUser.mustChangePassword ? "Trocar senha agora" : "Trocar senha"}
-              </button>
             </div>
           </header>
         )}
         {screenError ? <div className="status-banner error">{screenError}</div> : null}
         {currentUser?.mustChangePassword && !isLoginRoute ? (
           <div className="status-banner warning">
-            Sua conta esta com senha temporaria. Troque a senha antes de continuar usando a aplicacao.
+            Sua conta esta com senha temporaria. Atualize a senha em Minha conta.
           </div>
         ) : null}
         <Routes>
@@ -1756,6 +1740,20 @@ export default function App() {
             )}
           />
           <Route
+            path="/my-account"
+            element={renderProtected(
+              <MyAccountPage
+                currentUser={currentUser as AuthenticatedUser}
+                isSubmittingProfile={isSubmittingProfile}
+                isChangingPassword={isChangingPassword}
+                onUpdateProfile={(values) => handleUpdateMyAccount(values)}
+                onChangePassword={(currentPassword, newPassword) =>
+                  handleAccountPasswordChange(currentPassword, newPassword)
+                }
+              />,
+            )}
+          />
+          <Route
             path="/pre-match"
             element={renderProtected(
               <PreMatchPage
@@ -1849,76 +1847,39 @@ export default function App() {
           />
           <Route
             path="/"
-            element={<Navigate to={currentUser ? (isCommonUser ? "/portal" : "/dashboard") : "/login"} replace />}
+            element={
+              <Navigate
+                to={
+                  currentUser
+                    ? currentUser.mustChangePassword
+                      ? "/my-account"
+                      : isCommonUser
+                        ? "/portal"
+                        : "/dashboard"
+                    : "/login"
+                }
+                replace
+              />
+            }
           />
           <Route
             path="*"
-            element={<Navigate to={currentUser ? (isCommonUser ? "/portal" : "/dashboard") : "/login"} replace />}
+            element={
+              <Navigate
+                to={
+                  currentUser
+                    ? currentUser.mustChangePassword
+                      ? "/my-account"
+                      : isCommonUser
+                        ? "/portal"
+                        : "/dashboard"
+                    : "/login"
+                }
+                replace
+              />
+            }
           />
         </Routes>
-        {isPasswordModalOpen ? (
-          <div className="modal-backdrop">
-            <div className="modal-card glass-card" style={{ width: "min(520px, 100%)" }}>
-              <div className="ledger-heading">
-                <div>
-                  <p className="eyebrow">Seguranca</p>
-                  <h3>Atualizar senha</h3>
-                </div>
-                {!currentUser?.mustChangePassword ? (
-                  <button type="button" className="ghost-button" onClick={closePasswordModal}>
-                    Fechar
-                  </button>
-                ) : null}
-              </div>
-              <div className="form-grid compact-grid">
-                <label className="form-span-2">
-                  Senha atual
-                  <input
-                    className="input-field"
-                    type="password"
-                    value={currentPasswordValue}
-                    onChange={(event) => setCurrentPasswordValue(event.target.value)}
-                    autoFocus
-                  />
-                </label>
-                <label className="form-span-2">
-                  Nova senha
-                  <input
-                    className="input-field"
-                    type="password"
-                    value={newPasswordValue}
-                    onChange={(event) => setNewPasswordValue(event.target.value)}
-                  />
-                </label>
-                <label className="form-span-2">
-                  Confirmar nova senha
-                  <input
-                    className="input-field"
-                    type="password"
-                    value={confirmPasswordValue}
-                    onChange={(event) => setConfirmPasswordValue(event.target.value)}
-                  />
-                </label>
-                {passwordChangeError ? <p className="error-text form-span-2">{passwordChangeError}</p> : null}
-                <div className="section-actions form-span-2">
-                  {!currentUser?.mustChangePassword ? (
-                    <button type="button" className="ghost-button" onClick={closePasswordModal}>
-                      Cancelar
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={isChangingPassword}
-                    onClick={() => void handlePasswordChange()}
-                  >
-                    {isChangingPassword ? "Salvando..." : "Atualizar senha"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </main>
     </div>
   );

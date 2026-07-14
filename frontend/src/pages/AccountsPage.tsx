@@ -34,6 +34,8 @@ const roleLabels = {
   COMMON: "Comum",
 } as const;
 
+const hasUsernameSpace = (value: string) => /\s/.test(value.trim());
+
 function toAccountFormValues(account: AccessAccountSummary): AccessAccountFormValues {
   return {
     username: account.username,
@@ -60,6 +62,7 @@ export function AccountsPage({
   const [editorMode, setEditorMode] = useState<"create" | "edit" | null>(null);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<AccessAccountFormValues>(defaultAccountFormValues);
+  const [formError, setFormError] = useState<string>();
 
   const linkedPlayerIds = new Set(
     accounts
@@ -75,6 +78,7 @@ export function AccountsPage({
     setEditorMode("create");
     setEditingAccountId(null);
     setFormValues(defaultAccountFormValues);
+    setFormError(undefined);
   };
 
   const openEditModal = (accountId: string) => {
@@ -86,12 +90,14 @@ export function AccountsPage({
     setEditorMode("edit");
     setEditingAccountId(accountId);
     setFormValues(toAccountFormValues(account));
+    setFormError(undefined);
   };
 
   const closeModal = () => {
     setEditorMode(null);
     setEditingAccountId(null);
     setFormValues(defaultAccountFormValues);
+    setFormError(undefined);
   };
 
   const handleFieldChange =
@@ -107,9 +113,16 @@ export function AccountsPage({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setFormError(undefined);
+
+    if (hasUsernameSpace(formValues.username)) {
+      setFormError("O usuario nao pode conter espacos.");
+      return;
+    }
 
     const payload: AccessAccountFormValues = {
       ...formValues,
+      username: formValues.username.trim(),
       linkedPlayerId: formValues.linkedPlayerId || null,
       password: formValues.password?.trim() ? formValues.password : "",
     };
@@ -301,6 +314,7 @@ export function AccountsPage({
                 />
                 Exigir troca de senha no proximo login
               </label>
+              {formError ? <p className="error-text form-span-2">{formError}</p> : null}
               <div className="section-actions form-span-2">
                 <button type="button" className="ghost-button" onClick={closeModal}>
                   Cancelar

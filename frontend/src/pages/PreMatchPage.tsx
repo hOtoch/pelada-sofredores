@@ -85,6 +85,21 @@ const getRatingLogRaterFilterValue = (entry: MatchPlayerRatingLogEntry) =>
 
 const formatRatingScore = (score: number) => score.toFixed(1);
 
+const quickRatingScores = [6, 7, 8, 9, 10] as const;
+
+const getOverallTierClass = (overall: number) => {
+  if (overall >= 90) {
+    return "diamond";
+  }
+  if (overall >= 75) {
+    return "gold";
+  }
+  if (overall >= 60) {
+    return "silver";
+  }
+  return "bronze";
+};
+
 const getLocalDateKey = (value: string) => toDateInputValue(value);
 const overallHistoryPalette = [
   "#34d399",
@@ -628,17 +643,16 @@ export function PreMatchPage({
       overallSummary.some((item) => item.ratingCount > 0) &&
       onRecalculateRatings,
   );
-  const canExportOverallImage = Boolean(ratingState?.ratingsFinalizedAt && overallSummary.length > 0);
+  const canExportOverallImage = Boolean(
+    canManageMatch && ratingState?.ratingsFinalizedAt && overallSummary.length > 0,
+  );
   const ratingItems = ratingState?.items ?? [];
   const ratingLogEntries = ratingState?.log ?? [];
   const completedRatingCount = ratingItems.filter((item) => Boolean(ratingDraft[item.attendanceId])).length;
   const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
   const activeRatingScore = activeRatingItem ? ratingDraft[activeRatingItem.attendanceId] ?? 0 : 0;
-  const activeRatingFinalScore = Math.ceil(activeRatingScore);
-  const activeRatingBaseScore = activeRatingScore ? Math.floor(activeRatingScore) : 0;
-  const activeRatingDecimalStep = activeRatingScore
-    ? Math.round((activeRatingScore - activeRatingBaseScore) * 10)
-    : 0;
+  const activeRatingSliderValue = activeRatingScore || 5.5;
+  const activeRatingMeterPercent = activeRatingScore ? ((activeRatingScore - 1) / 9) * 100 : 0;
   const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
   const responsiblePlayerOptions = useMemo(
     () =>
@@ -1632,14 +1646,16 @@ export function PreMatchPage({
                   : "A exportação fica disponível após finalizar a janela."}
               </small>
             </div>
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={!canExportOverallImage || isRecalculatingRatings}
-              onClick={handleExportOverallImage}
-            >
-              Exportar imagem
-            </button>
+            {canManageMatch && (
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={!canExportOverallImage || isRecalculatingRatings}
+                onClick={handleExportOverallImage}
+              >
+                Exportar imagem
+              </button>
+            )}
           </div>
 
           {shouldShowOverallHistory && (
@@ -1696,185 +1712,167 @@ export function PreMatchPage({
           ) : ratingItems.length === 0 && ratingLogEntries.length === 0 ? (
             <p className="empty-state">
               {ratingState.ratingsFinalizedAt && overallSummary.length > 0
-                ? "Janela finalizada. Exporte a imagem para compartilhar os overalls atualizados."
+                ? canManageMatch
+                  ? "Janela finalizada. Exporte a imagem para compartilhar os overalls atualizados."
+                  : "Janela finalizada. Os overalls da rodada ja foram atualizados."
                 : ratingState.lockedReason || "A tela de notas está vazia para esta pelada."}
             </p>
           ) : (
-            <>
+            <div className={`rating-workspace ${ratingItems.length === 0 ? "log-only" : ""}`}>
               {ratingItems.length > 0 && (
-                <div className="rating-carousel-shell">
-                  <button
-                    type="button"
-                    className="rating-carousel-control"
-                    disabled={ratingItems.length < 2}
-                    onClick={() => handleRatingCardStep(-1)}
-                    aria-label="Jogador anterior"
-                  >
-                    ‹
-                  </button>
-
-                  {activeRatingItem && (
-                    <article
-                      className={`rating-player-card rating-carousel-card ${
-                        activeRatingScore ? `rated score-${activeRatingFinalScore}` : ""
-                      }`}
+                <div className="rating-vote-panel">
+                  <div className="rating-carousel-shell">
+                    <button
+                      type="button"
+                      className="rating-carousel-control"
+                      disabled={ratingItems.length < 2}
+                      onClick={() => handleRatingCardStep(-1)}
+                      aria-label="Jogador anterior"
                     >
-                      <header>
-                        <div>
-                          <span className="rating-card-kicker">Player card</span>
-                          <h4>{activeRatingItem.displayName}</h4>
-                        </div>
-                        <div className="rating-overall-badge">
-                          <strong>{activeRatingItem.currentOverall}</strong>
-                          <span>OVR</span>
-                        </div>
-                      </header>
-                      <div className="rating-impact-panel" aria-live="polite">
-                        <div className="rating-selected-score">
-                          <span>Nota</span>
-                          <strong>{activeRatingScore ? activeRatingScore.toFixed(1) : "-"}</strong>
-                        </div>
-                        <div className="rating-card-stripes" aria-hidden="true">
-                          {Array.from({ length: 10 }, (_, stripeIndex) => (
-                            <span
-                              key={stripeIndex}
-                              className={stripeIndex < activeRatingFinalScore ? "filled" : ""}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      {ratingState.canRate ? (
-                        <div className="rating-score-grid">
-                          <div className="rating-score-base-grid" aria-label="Nota base">
-                            {Array.from({ length: 10 }, (_, scoreIndex) => scoreIndex + 1).map((score) => (
-                              <button
-                                key={score}
-                                type="button"
-                                className={`rating-score-button ${
-                                  activeRatingBaseScore === score || (activeRatingScore === 10 && score === 10)
-                                    ? "active"
-                                    : ""
-                                }`}
-                                onClick={() =>
-                                  setRatingDraft((prev) => ({
-                                    ...prev,
-                                    [activeRatingItem.attendanceId]: score,
-                                  }))
-                                }
-                              >
-                                {score}
-                              </button>
-                            ))}
+                      ‹
+                    </button>
+
+                    {activeRatingItem && (
+                      <article
+                        className={`rating-player-card rating-carousel-card ${activeRatingScore ? "rated" : ""}`}
+                      >
+                        <header>
+                          <div>
+                            <span className="rating-card-kicker">Jogador</span>
+                            <h4>{activeRatingItem.displayName}</h4>
                           </div>
-                          <div className="rating-score-decimal-grid" aria-label="Ajuste decimal">
-                            {Array.from({ length: 10 }, (_, decimalIndex) => (
-                              <button
-                                key={decimalIndex}
-                                type="button"
-                                className={`rating-score-decimal-button ${
-                                  activeRatingScore && activeRatingDecimalStep === decimalIndex ? "active" : ""
-                                }`}
-                                disabled={!activeRatingBaseScore || activeRatingBaseScore >= 10}
-                                onClick={() => {
-                                  if (!activeRatingBaseScore || activeRatingBaseScore >= 10) {
-                                    return;
-                                  }
-                                  const nextScore = Number(`${activeRatingBaseScore}.${decimalIndex}`);
+                          <div
+                            className={`rating-overall-badge ${getOverallTierClass(
+                              activeRatingItem.currentOverall,
+                            )}`}
+                            aria-label={`${activeRatingItem.currentOverall} overall`}
+                          >
+                            <strong>{activeRatingItem.currentOverall}</strong>
+                            <span>OVR</span>
+                          </div>
+                        </header>
+
+                        <div className="rating-impact-panel" aria-live="polite">
+                          <div className="rating-selected-score">
+                            <span>Nota</span>
+                            <strong>{activeRatingScore ? activeRatingScore.toFixed(1) : "-"}</strong>
+                          </div>
+                          <div className="rating-score-summary">
+                            <div className="rating-score-meter" aria-hidden="true">
+                              <span style={{ width: `${activeRatingMeterPercent}%` }} />
+                            </div>
+                            <div className="rating-score-range">
+                              <span>1.0</span>
+                              <span>10.0</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {ratingState.canRate ? (
+                          <div className="rating-score-grid">
+                            <label className="rating-slider-field">
+                              <span className="sr-only">Nota de {activeRatingItem.displayName}</span>
+                              <input
+                                className="rating-score-slider"
+                                type="range"
+                                min="1"
+                                max="10"
+                                step="0.1"
+                                value={activeRatingSliderValue}
+                                onChange={(event) => {
+                                  const nextScore = Number(Number(event.target.value).toFixed(1));
                                   setRatingDraft((prev) => ({
                                     ...prev,
                                     [activeRatingItem.attendanceId]: nextScore,
                                   }));
                                 }}
-                              >
-                                .{decimalIndex}
-                              </button>
-                            ))}
+                              />
+                            </label>
+                            <div className="rating-quick-scores" aria-label="Notas rapidas">
+                              {quickRatingScores.map((score) => (
+                                <button
+                                  key={score}
+                                  type="button"
+                                  className={`rating-score-button ${
+                                    activeRatingScore === score ? "active" : ""
+                                  }`}
+                                  onClick={() =>
+                                    setRatingDraft((prev) => ({
+                                      ...prev,
+                                      [activeRatingItem.attendanceId]: score,
+                                    }))
+                                  }
+                                >
+                                  {score}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                          <div className="rating-score-stepper" aria-label="Ajuste fino">
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              disabled={!activeRatingScore || activeRatingScore <= 1}
-                              onClick={() => {
-                                const nextScore = Math.max(1, Number((activeRatingScore - 0.1).toFixed(1)));
-                                setRatingDraft((prev) => ({
-                                  ...prev,
-                                  [activeRatingItem.attendanceId]: nextScore,
-                                }));
-                              }}
-                            >
-                              -0.1
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              disabled={!activeRatingScore || activeRatingScore >= 10}
-                              onClick={() => {
-                                const nextScore = Math.min(10, Number((activeRatingScore + 0.1).toFixed(1)));
-                                setRatingDraft((prev) => ({
-                                  ...prev,
-                                  [activeRatingItem.attendanceId]: nextScore,
-                                }));
-                              }}
-                            >
-                              +0.1
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="empty-state">
-                          {ratingState.lockedReason || "Você pode acompanhar o log, mas não votar nesta rodada."}
-                        </p>
-                      )}
-                      <footer>
-                        <span>{activeRatingItem.ratingCount} voto(s)</span>
-                        <strong>
-                          {activeRatingItem.averageScore ? `${activeRatingItem.averageScore.toFixed(1)} média` : "Sem média"}
-                        </strong>
-                      </footer>
-                    </article>
+                        ) : (
+                          <p className="empty-state">
+                            {ratingState.lockedReason || "Você pode acompanhar o log, mas não votar nesta rodada."}
+                          </p>
+                        )}
+
+                        <footer>
+                          <span>
+                            {ratingCardIndex + 1}/{ratingItems.length}
+                          </span>
+                          <span>{activeRatingItem.ratingCount} voto(s)</span>
+                          <strong>
+                            {activeRatingItem.averageScore
+                              ? `${activeRatingItem.averageScore.toFixed(1)} media`
+                              : "Sem media"}
+                          </strong>
+                        </footer>
+                      </article>
+                    )}
+
+                    <button
+                      type="button"
+                      className="rating-carousel-control"
+                      disabled={ratingItems.length < 2}
+                      onClick={() => handleRatingCardStep(1)}
+                      aria-label="Próximo jogador"
+                    >
+                      ›
+                    </button>
+                  </div>
+
+                  {ratingItems.length > 1 && (
+                    <div className="rating-carousel-dots" aria-label="Jogadores para avaliar">
+                      {ratingItems.map((item, index) => (
+                        <button
+                          key={item.attendanceId}
+                          type="button"
+                          className={index === ratingCardIndex ? "active" : ""}
+                          onClick={() => setRatingCardIndex(index)}
+                          aria-label={`Ir para ${item.displayName}`}
+                        />
+                      ))}
+                    </div>
                   )}
 
-                  <button
-                    type="button"
-                    className="rating-carousel-control"
-                    disabled={ratingItems.length < 2}
-                    onClick={() => handleRatingCardStep(1)}
-                    aria-label="Próximo jogador"
-                  >
-                    ›
-                  </button>
-                </div>
-              )}
-
-              {ratingItems.length > 1 && (
-                <div className="rating-carousel-dots" aria-label="Jogadores para avaliar">
-                  {ratingItems.map((item, index) => (
-                    <button
-                      key={item.attendanceId}
-                      type="button"
-                      className={index === ratingCardIndex ? "active" : ""}
-                      onClick={() => setRatingCardIndex(index)}
-                      aria-label={`Ir para ${item.displayName}`}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {ratingState.canRate && (
-                <div className="rating-submit-row">
-                  <button
-                    type="button"
-                    className="primary-button rating-submit-button"
-                    disabled={
-                      isSubmittingRatings ||
-                      ratingItems.length === 0 ||
-                      ratingItems.some((item) => !ratingDraft[item.attendanceId])
-                    }
-                    onClick={() => void handleRatingSubmit()}
-                  >
-                    {isSubmittingRatings ? "Enviando notas..." : ratingState.hasSubmitted ? "Atualizar notas" : "Enviar notas"}
-                  </button>
+                  {ratingState.canRate && (
+                    <div className="rating-submit-row">
+                      <button
+                        type="button"
+                        className="primary-button rating-submit-button"
+                        disabled={
+                          isSubmittingRatings ||
+                          ratingItems.length === 0 ||
+                          ratingItems.some((item) => !ratingDraft[item.attendanceId])
+                        }
+                        onClick={() => void handleRatingSubmit()}
+                      >
+                        {isSubmittingRatings
+                          ? "Enviando notas..."
+                          : ratingState.hasSubmitted
+                            ? "Atualizar notas"
+                            : "Enviar notas"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1974,7 +1972,7 @@ export function PreMatchPage({
                   </>
                 )}
               </div>
-            </>
+            </div>
           )}
             </div>
         </>

@@ -38,6 +38,7 @@ from .serializers import (
     TeamGenerationResponseSerializer,
     TransactionSerializer,
     UserAccountSerializer,
+    UserProfileUpdateSerializer,
     UserSerializer,
 )
 
@@ -1008,6 +1009,17 @@ class AuthSignupView(APIView):
 
 class AuthMeView(APIView):
     def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = UserProfileUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(UserSerializer(request.user).data)
 
 

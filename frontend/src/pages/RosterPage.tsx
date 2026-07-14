@@ -44,6 +44,8 @@ const roleLabels = {
   COMMON: "Comum",
 } as const;
 
+const hasUsernameSpace = (value: string) => /\s/.test(value.trim());
+
 const positionLabels: Record<(typeof positionOptions)[number], string> = {
   ALL: "Todas",
   GOALKEEPER: "Goleiro",
@@ -121,6 +123,7 @@ export function RosterPage({
   const [accountFormValues, setAccountFormValues] = useState<AccessAccountFormValues>(
     defaultAccountFormValues,
   );
+  const [accountFormError, setAccountFormError] = useState<string>();
 
   const editingPlayer = players.find((player) => player.id === editingPlayerId) ?? null;
   const editingAccount = accounts.find((account) => account.id === editingAccountId) ?? null;
@@ -163,6 +166,7 @@ export function RosterPage({
     setAccountEditorMode("create");
     setEditingAccountId(null);
     setAccountFormValues(defaultAccountFormValues);
+    setAccountFormError(undefined);
   };
 
   const openEditAccountModal = (accountId: string) => {
@@ -176,12 +180,14 @@ export function RosterPage({
     setAccountEditorMode("edit");
     setEditingAccountId(accountId);
     setAccountFormValues(toAccountFormValues(account));
+    setAccountFormError(undefined);
   };
 
   const closeAccountModal = () => {
     setAccountEditorMode(null);
     setEditingAccountId(null);
     setAccountFormValues(defaultAccountFormValues);
+    setAccountFormError(undefined);
   };
 
   const handleFilterChange =
@@ -247,8 +253,16 @@ export function RosterPage({
 
   const handleAccountSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setAccountFormError(undefined);
+
+    if (hasUsernameSpace(accountFormValues.username)) {
+      setAccountFormError("O usuario nao pode conter espacos.");
+      return;
+    }
+
     const payload: AccessAccountFormValues = {
       ...accountFormValues,
+      username: accountFormValues.username.trim(),
       linkedPlayerId: accountFormValues.linkedPlayerId || null,
       password: accountFormValues.password?.trim() ? accountFormValues.password : "",
     };
@@ -674,6 +688,7 @@ export function RosterPage({
                 />
                 Exigir troca de senha no próximo login
               </label>
+              {accountFormError ? <p className="error-text form-span-2">{accountFormError}</p> : null}
               <div className="section-actions form-span-2">
                 <button type="button" className="ghost-button" onClick={closeAccountModal}>
                   Cancelar
