@@ -1485,7 +1485,6 @@ export default function App() {
   const isCommonUser = currentUser?.role === "COMMON";
   const navigation = isCommonUser ? commonNavigation : adminNavigation;
   const portalRecentTeams = buildPortalRecentTeams(portalRecentAttendance, matches);
-  const currentNavItem = navigation.find((item) => location.pathname.startsWith(item.path)) ?? navigation[0];
   const currentUserName = currentUser?.displayName || currentUser?.username || "Jogador";
   const attendancePlayerIds = new Set(attendance.map((entry) => entry.playerId).filter(Boolean));
   const availablePlayers = players.filter(
@@ -1586,22 +1585,9 @@ export default function App() {
       <main className="main-area">
         {!isLoginRoute && currentUser && (
           <header className="top-bar">
-            {location.pathname !== "/ratings" ? (
-              <div className="top-bar-copy">
-                <strong className="top-bar-title">{currentNavItem?.label ?? "Peladinhas Sofredores"}</strong>
-              </div>
-            ) : null}
             <div className="top-bar-pill">
               <span>Bem-vindo, {currentUserName}</span>
               <span className="dot" />
-            </div>
-            <div className="top-bar-actions">
-              <span className="top-meta-chip">
-                {currentMatch ? matchStatusLabels[currentMatch.status] : "Sem pelada ativa"}
-              </span>
-              <span className={`top-meta-chip ${isAdmin ? "accent" : ""}`}>
-                {roleLabels[currentUser.role]}
-              </span>
             </div>
           </header>
         )}

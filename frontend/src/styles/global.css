@@ -459,23 +459,6 @@ button {
   backdrop-filter: blur(20px);
 }
 
-.top-bar-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.top-bar-title {
-  font-family: var(--font-heading);
-  font-size: 1.2rem;
-  line-height: 1.15;
-}
-
-.top-bar-subtitle {
-  color: var(--color-text-secondary);
-  font-size: 0.84rem;
-}
-
 .top-bar-pill {
   display: inline-flex;
   align-items: center;
@@ -493,34 +476,6 @@ button {
   background: var(--color-purple-soft);
   border-radius: 50%;
   box-shadow: 0 0 16px rgba(124, 58, 237, 0.95);
-}
-
-.top-bar-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.65rem;
-  flex-wrap: wrap;
-  margin-left: auto;
-}
-
-.top-meta-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.68rem 0.92rem;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.top-meta-chip.accent {
-  background: rgba(124, 58, 237, 0.16);
-  border-color: rgba(150, 99, 250, 0.28);
-  color: #f0e8ff;
 }
 
 .toast-stack {
@@ -2383,11 +2338,6 @@ select.input-field option:checked {
 
   .top-bar-pill {
     order: -1;
-  }
-
-  .top-bar-actions {
-    width: 100%;
-    justify-content: flex-start;
   }
 
   .section-heading {

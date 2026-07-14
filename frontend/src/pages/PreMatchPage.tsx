@@ -1175,7 +1175,7 @@ export function PreMatchPage({
     <section className="page-section">
       <header className="section-heading">
         <div>
-          <p className="eyebrow">Pré-Jogo</p>
+          <p className="eyebrow">{activeSection === "ratings" ? "Notas" : "Pré-Jogo"}</p>
           <h2 style={{ fontFamily: themeTokens.fontFamily.heading }}>
             {match ? `Pelada de ${formatDateTime(match.scheduledAt)}` : "Nenhuma pelada selecionada"}
           </h2>
