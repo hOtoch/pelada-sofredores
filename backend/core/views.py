@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import io
 import unicodedata
 from datetime import date, datetime, timedelta
@@ -11,6 +10,8 @@ from django.db import transaction
 from django.db.models import Case, Count, DecimalField, F, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from rest_framework import status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.authtoken.models import Token
@@ -339,19 +340,10 @@ def finalize_due_match_ratings() -> None:
         finalize_match_ratings_if_due(match)
 
 
-MATCH_STATS_CSV_HEADERS = [
-    "tipo",
-    "time_numero",
-    "time",
-    "attendance_id",
-    "jogador_id",
-    "jogador",
-    "perfil",
-    "gols",
-    "assistencias",
-    "vitoria_time",
-]
-TRUTHY_CSV_VALUES = {"1", "x", "s", "sim", "true", "verdadeiro", "vitoria", "ganhou", "win", "yes"}
+MATCH_STATS_SHEET_NAME = "Estatisticas"
+MATCH_STATS_HEADERS = ["Jogador", "Perfil", "Gols", "Assistencias"]
+TRUTHY_SHEET_VALUES = {"1", "x", "s", "sim", "true", "verdadeiro", "vitoria", "ganhou", "win", "yes"}
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def normalize_csv_key(value: str | None) -> str:
@@ -360,23 +352,15 @@ def normalize_csv_key(value: str | None) -> str:
     return "".join(character for character in ascii_value.lower() if character.isalnum())
 
 
-def normalize_csv_value(value: object) -> str:
+def normalize_sheet_value(value: object) -> str:
     return str(value or "").strip()
 
 
-def csv_row_value(row: dict, *keys: str) -> str:
-    for key in keys:
-        value = row.get(key)
-        if value not in (None, ""):
-            return normalize_csv_value(value)
-    return ""
-
-
-def parse_csv_integer(value: str, field_name: str) -> int:
+def parse_sheet_integer(value: object, field_name: str) -> int:
     if not value:
         return 0
     try:
-        parsed = int(Decimal(value.replace(",", ".")))
+        parsed = int(Decimal(str(value).replace(",", ".")))
     except Exception as exc:
         raise ValidationError({field_name: f"Valor invalido: {value}."}) from exc
     if parsed < 0:
@@ -384,63 +368,52 @@ def parse_csv_integer(value: str, field_name: str) -> int:
     return parsed
 
 
-def parse_csv_boolean(value: str) -> bool:
-    return normalize_csv_key(value) in TRUTHY_CSV_VALUES
+def parse_sheet_boolean(value: object) -> bool:
+    return normalize_csv_key(str(value or "")) in TRUTHY_SHEET_VALUES
 
 
-def get_attendance_team_key(attendance: MatchAttendance) -> tuple[str, str] | None:
-    if attendance.assigned_team_number is not None:
-        return ("number", str(attendance.assigned_team_number))
-    if attendance.assigned_team_name:
-        return ("name", normalize_csv_key(attendance.assigned_team_name))
-    return None
+def get_attendance_team_name(attendance: MatchAttendance) -> str:
+    return attendance.assigned_team_name or (
+        f"Time {attendance.assigned_team_number}"
+        if attendance.assigned_team_number is not None
+        else "Sem time"
+    )
 
 
-def get_row_team_key(row: dict) -> tuple[str, str] | None:
-    team_number = csv_row_value(row, "timenumero", "numerotime", "timeid")
-    if team_number:
-        return ("number", team_number)
-    team_name = csv_row_value(row, "time", "timenome", "equipe")
-    if team_name:
-        return ("name", normalize_csv_key(team_name))
-    return None
+def get_attendance_visible_team_key(attendance: MatchAttendance) -> tuple[str, str]:
+    return ("name", normalize_csv_key(get_attendance_team_name(attendance)))
 
 
-def decode_uploaded_csv(uploaded_file) -> str:
-    raw_content = uploaded_file.read()
-    try:
-        return raw_content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        return raw_content.decode("cp1252")
+def build_match_stats_xlsx_response(match: Match) -> HttpResponse:
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = MATCH_STATS_SHEET_NAME
 
+    title_fill = PatternFill("solid", fgColor="312E81")
+    team_fill = PatternFill("solid", fgColor="EDE9FE")
+    header_fill = PatternFill("solid", fgColor="4F46E5")
+    editable_fill = PatternFill("solid", fgColor="FEF3C7")
+    border_side = Side(style="thin", color="D4D4D8")
+    cell_border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+    center_alignment = Alignment(horizontal="center", vertical="center")
 
-def read_match_stats_csv(uploaded_file) -> list[dict]:
-    content = decode_uploaded_csv(uploaded_file)
-    if not content.strip():
-        raise ValidationError({"file": "A planilha esta vazia."})
+    worksheet.merge_cells("A1:D1")
+    worksheet["A1"] = f"Pelada de {timezone.localtime(match.scheduled_at).strftime('%d/%m/%Y %H:%M')}"
+    worksheet["A1"].fill = title_fill
+    worksheet["A1"].font = Font(color="FFFFFF", bold=True, size=14)
+    worksheet["A1"].alignment = center_alignment
+    worksheet.row_dimensions[1].height = 28
 
-    sample = content[:2048]
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=";,")
-    except csv.Error:
-        dialect = csv.excel
-        dialect.delimiter = ";"
+    worksheet.merge_cells("A2:D2")
+    worksheet["A2"] = match.location or "Local a definir"
+    worksheet["A2"].font = Font(color="52525B", italic=True)
+    worksheet["A2"].alignment = center_alignment
+    worksheet.row_dimensions[2].height = 22
 
-    reader = csv.DictReader(io.StringIO(content), dialect=dialect)
-    if not reader.fieldnames:
-        raise ValidationError({"file": "A planilha precisa ter uma linha de cabecalho."})
-
-    normalized_rows = []
-    for row in reader:
-        normalized_rows.append({normalize_csv_key(key): value for key, value in row.items() if key})
-    return normalized_rows
-
-
-def build_match_stats_csv_response(match: Match) -> HttpResponse:
-    buffer = io.StringIO()
-    buffer.write("\ufeff")
-    writer = csv.writer(buffer, delimiter=";", lineterminator="\n")
-    writer.writerow(MATCH_STATS_CSV_HEADERS)
+    worksheet.column_dimensions["A"].width = 32
+    worksheet.column_dimensions["B"].width = 16
+    worksheet.column_dimensions["C"].width = 14
+    worksheet.column_dimensions["D"].width = 18
 
     attendance_entries = list(
         match.attendance_entries.select_related("player")
@@ -459,97 +432,178 @@ def build_match_stats_csv_response(match: Match) -> HttpResponse:
         }
     )
 
+    current_row = 4
     for team_number in team_numbers:
         team_entries = [entry for entry in attendance_entries if entry.assigned_team_number == team_number]
         team_name = team_entries[0].assigned_team_name or f"Time {team_number}"
         team_won = any(stats_by_attendance_id.get(entry.id) and stats_by_attendance_id[entry.id].team_won for entry in team_entries)
-        writer.writerow(["TIME", team_number, team_name, "", "", "", "", "", "", "1" if team_won else ""])
+        worksheet.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
+        worksheet.cell(current_row, 1, team_name)
+        worksheet.cell(current_row, 3, "Vitoria do time")
+        worksheet.cell(current_row, 4, "SIM" if team_won else "")
+        for column in range(1, 5):
+            cell = worksheet.cell(current_row, column)
+            cell.fill = team_fill if column < 4 else editable_fill
+            cell.font = Font(bold=True, color="312E81")
+            cell.border = cell_border
+            cell.alignment = center_alignment if column >= 3 else Alignment(vertical="center")
+        worksheet.row_dimensions[current_row].height = 24
+        current_row += 1
+
+        for index, header in enumerate(MATCH_STATS_HEADERS, start=1):
+            cell = worksheet.cell(current_row, index, header)
+            cell.fill = header_fill
+            cell.font = Font(color="FFFFFF", bold=True)
+            cell.border = cell_border
+            cell.alignment = center_alignment
+        worksheet.row_dimensions[current_row].height = 24
+        current_row += 1
+
         for entry in team_entries:
             stat = stats_by_attendance_id.get(entry.id)
-            writer.writerow(
-                [
-                    "JOGADOR",
-                    team_number,
-                    team_name,
-                    entry.id,
-                    entry.player_id or "",
-                    entry.display_name,
-                    "Convidado" if entry.is_guest else "Mensalista",
-                    stat.goals if stat else "",
-                    stat.assists if stat else "",
-                    "",
-                ]
-            )
+            values = [
+                entry.display_name,
+                "Convidado" if entry.is_guest else "Mensalista",
+                stat.goals if stat else "",
+                stat.assists if stat else "",
+            ]
+            for index, value in enumerate(values, start=1):
+                cell = worksheet.cell(current_row, index, value)
+                cell.border = cell_border
+                cell.alignment = center_alignment if index in {2, 3, 4} else Alignment(vertical="center")
+                if index in {3, 4}:
+                    cell.fill = editable_fill
+                    cell.protection = Protection(locked=False)
+            worksheet.row_dimensions[current_row].height = 24
+            current_row += 1
+
+        current_row += 1
 
     unassigned_entries = [entry for entry in attendance_entries if entry.assigned_team_number is None]
     if unassigned_entries:
-        writer.writerow(["TIME", "", "Sem time", "", "", "", "", "", "", ""])
+        worksheet.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+        worksheet.cell(current_row, 1, "Sem time")
+        for column in range(1, 5):
+            cell = worksheet.cell(current_row, column)
+            cell.fill = team_fill
+            cell.font = Font(bold=True, color="312E81")
+            cell.border = cell_border
+        worksheet.row_dimensions[current_row].height = 24
+        current_row += 1
+
+        for index, header in enumerate(MATCH_STATS_HEADERS, start=1):
+            cell = worksheet.cell(current_row, index, header)
+            cell.fill = header_fill
+            cell.font = Font(color="FFFFFF", bold=True)
+            cell.border = cell_border
+            cell.alignment = center_alignment
+        worksheet.row_dimensions[current_row].height = 24
+        current_row += 1
+
         for entry in unassigned_entries:
             stat = stats_by_attendance_id.get(entry.id)
-            writer.writerow(
-                [
-                    "JOGADOR",
-                    "",
-                    entry.assigned_team_name or "Sem time",
-                    entry.id,
-                    entry.player_id or "",
-                    entry.display_name,
-                    "Convidado" if entry.is_guest else "Mensalista",
-                    stat.goals if stat else "",
-                    stat.assists if stat else "",
-                    "1" if stat and stat.team_won else "",
-                ]
-            )
+            values = [
+                entry.display_name,
+                "Convidado" if entry.is_guest else "Mensalista",
+                stat.goals if stat else "",
+                stat.assists if stat else "",
+            ]
+            for index, value in enumerate(values, start=1):
+                cell = worksheet.cell(current_row, index, value)
+                cell.border = cell_border
+                cell.alignment = center_alignment if index in {2, 3, 4} else Alignment(vertical="center")
+                if index in {3, 4}:
+                    cell.fill = editable_fill
+                    cell.protection = Protection(locked=False)
+            worksheet.row_dimensions[current_row].height = 24
+            current_row += 1
 
-    filename = f"estatisticas-pelada-{match.scheduled_at.date().isoformat()}.csv"
-    response = HttpResponse(buffer.getvalue(), content_type="text/csv; charset=utf-8")
+    for row in worksheet.iter_rows():
+        for cell in row:
+            cell.protection = Protection(locked=False)
+    worksheet.freeze_panes = "A4"
+    worksheet.sheet_view.showGridLines = False
+    worksheet.protection.sheet = False
+
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    filename = f"estatisticas-pelada-{match.scheduled_at.date().isoformat()}.xlsx"
+    response = HttpResponse(buffer.getvalue(), content_type=XLSX_CONTENT_TYPE)
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
-def import_match_stats_from_csv(match: Match, uploaded_file, user: User) -> dict:
-    rows = read_match_stats_csv(uploaded_file)
+def import_match_stats_from_xlsx(match: Match, uploaded_file, user: User) -> dict:
+    try:
+        workbook = load_workbook(uploaded_file, data_only=True)
+    except Exception as exc:
+        raise ValidationError({"file": "Envie a planilha XLSX exportada pelo sistema."}) from exc
+
+    if MATCH_STATS_SHEET_NAME not in workbook.sheetnames:
+        raise ValidationError({"file": "A planilha precisa ser o XLSX exportado pelo sistema."})
+
+    worksheet = workbook[MATCH_STATS_SHEET_NAME]
     attendance_entries = list(
         match.attendance_entries.select_related("player")
         .filter(attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED)
     )
-    attendance_by_id = {str(entry.id): entry for entry in attendance_entries}
+    attendance_by_visible_key = {}
+    duplicate_visible_keys = set()
+    for entry in attendance_entries:
+        visible_key = (get_attendance_visible_team_key(entry), normalize_csv_key(entry.display_name))
+        if visible_key in attendance_by_visible_key:
+            duplicate_visible_keys.add(visible_key)
+            continue
+        attendance_by_visible_key[visible_key] = entry
+
     parsed_stats_by_attendance_id = {}
     winning_team_keys = set()
     player_rows_found = 0
+    current_team_key = None
 
-    for row in rows:
-        row_type = normalize_csv_key(csv_row_value(row, "tipo", "type"))
-        attendance_id = csv_row_value(row, "attendanceid", "presencaid", "idpresenca", "idpresenca")
-        is_player_row = row_type in {"jogador", "player"} or bool(attendance_id)
-        is_team_row = row_type in {"time", "team", "equipe"} and not is_player_row
-        team_won = parse_csv_boolean(csv_row_value(row, "vitoriatime", "vitoria", "ganhou", "win"))
+    for row_number in range(4, worksheet.max_row + 1):
+        first_value = normalize_sheet_value(worksheet.cell(row_number, 1).value)
+        second_value = normalize_sheet_value(worksheet.cell(row_number, 2).value)
+        third_value = normalize_sheet_value(worksheet.cell(row_number, 3).value)
+        fourth_value = worksheet.cell(row_number, 4).value
+        normalized_first = normalize_csv_key(first_value)
+        normalized_third = normalize_csv_key(third_value)
 
-        if team_won:
-            team_key = get_row_team_key(row)
-            if team_key:
-                winning_team_keys.add(team_key)
+        if not any([first_value, second_value, third_value, fourth_value]):
+            continue
 
+        if normalized_first == "jogador":
+            continue
+
+        is_team_row = bool(first_value) and (
+            normalized_third == "vitoriadotime" or (not second_value and not third_value)
+        )
         if is_team_row:
+            current_team_key = ("name", normalize_csv_key(first_value))
+            if parse_sheet_boolean(fourth_value):
+                winning_team_keys.add(current_team_key)
             continue
-        if not is_player_row:
-            continue
-        if not attendance_id:
-            raise ValidationError({"attendance_id": "Linhas de jogador precisam manter o attendance_id exportado."})
 
-        attendance_entry = attendance_by_id.get(attendance_id)
+        if not first_value or current_team_key is None:
+            continue
+
+        visible_key = (current_team_key, normalize_csv_key(first_value))
+        if visible_key in duplicate_visible_keys:
+            raise ValidationError(
+                {"file": f"Ha jogadores com nome duplicado no time {first_value}. Renomeie antes de importar."}
+            )
+
+        attendance_entry = attendance_by_visible_key.get(visible_key)
         if not attendance_entry:
-            raise ValidationError({"attendance_id": f"Presenca desconhecida nesta pelada: {attendance_id}."})
+            raise ValidationError({"file": f"Jogador nao encontrado nesta pelada: {first_value}."})
+        attendance_id = str(attendance_entry.id)
         if attendance_id in parsed_stats_by_attendance_id:
-            raise ValidationError({"attendance_id": f"Presenca duplicada na planilha: {attendance_id}."})
+            raise ValidationError({"file": f"Jogador duplicado na planilha: {first_value}."})
 
         player_rows_found += 1
         parsed_stats_by_attendance_id[attendance_id] = {
-            "goals": parse_csv_integer(csv_row_value(row, "gols", "gol", "goals"), "gols"),
-            "assists": parse_csv_integer(
-                csv_row_value(row, "assistencias", "assistencia", "assists", "assist"),
-                "assistencias",
-            ),
+            "goals": parse_sheet_integer(worksheet.cell(row_number, 3).value, "gols"),
+            "assists": parse_sheet_integer(worksheet.cell(row_number, 4).value, "assistencias"),
         }
 
     if player_rows_found == 0:
@@ -562,7 +616,7 @@ def import_match_stats_from_csv(match: Match, uploaded_file, user: User) -> dict
             str(attendance_entry.id),
             {"goals": 0, "assists": 0},
         )
-        team_key = get_attendance_team_key(attendance_entry)
+        team_key = get_attendance_visible_team_key(attendance_entry)
         stats_to_create.append(
             MatchPlayerStat(
                 match=match,
@@ -833,7 +887,7 @@ class MatchViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="stats-sheet")
     def export_stats_sheet(self, request, pk=None):
         match = self.get_object()
-        return build_match_stats_csv_response(match)
+        return build_match_stats_xlsx_response(match)
 
     @action(
         detail=True,
@@ -845,9 +899,9 @@ class MatchViewSet(viewsets.ModelViewSet):
         match = self.get_object()
         uploaded_file = request.FILES.get("file")
         if uploaded_file is None:
-            raise ValidationError({"file": "Envie um arquivo CSV no campo file."})
+            raise ValidationError({"file": "Envie um arquivo XLSX no campo file."})
 
-        summary = import_match_stats_from_csv(match, uploaded_file, request.user)
+        summary = import_match_stats_from_xlsx(match, uploaded_file, request.user)
         serializer = MatchStatsImportSummarySerializer(summary)
         return Response(serializer.data)
 

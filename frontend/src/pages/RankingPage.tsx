@@ -122,7 +122,7 @@ export function RankingPage({
               <p className="eyebrow">Administração</p>
               <h3>Planilha da rodada</h3>
               <small className="muted">
-                Exporte a pelada, preencha gols, assistências e vitória, depois importe o CSV preenchido.
+                Exporte a pelada, preencha gols, assistências e vitória, depois importe o XLSX preenchido.
               </small>
             </div>
           </div>
@@ -166,7 +166,7 @@ export function RankingPage({
                 ref={statsSheetInputRef}
                 className="sr-only"
                 type="file"
-                accept=".csv,text/csv"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={(event) => void handleStatsSheetFile(event)}
               />
             </div>

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
+from openpyxl import load_workbook
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
@@ -414,36 +416,48 @@ class ApiFlowTests(APITestCase):
 
         export_response = self.client.get(f"/api/matches/{self.match.id}/stats-sheet/")
         self.assertEqual(export_response.status_code, 200)
-        self.assertIn("text/csv", export_response["Content-Type"])
-        self.assertIn(str(target_attendance.id), export_response.content.decode("utf-8-sig"))
+        self.assertIn("spreadsheetml.sheet", export_response["Content-Type"])
 
-        rows = [
-            "tipo;time_numero;time;attendance_id;jogador_id;jogador;perfil;gols;assistencias;vitoria_time",
-            f"TIME;{winning_team_number};{winning_team_name};;;;;;;sim",
+        workbook = load_workbook(io.BytesIO(export_response.content))
+        self.assertIn("Estatisticas", workbook.sheetnames)
+        worksheet = workbook["Estatisticas"]
+        visible_values = [
+            str(cell.value)
+            for row in worksheet.iter_rows()
+            for cell in row
+            if cell.value is not None
         ]
+        self.assertNotIn(str(target_attendance.id), visible_values)
+        self.assertEqual(worksheet["A4"].fill.fgColor.rgb, "00EDE9FE")
+        self.assertGreater(worksheet.column_dimensions["A"].width, 25)
+
+        winning_team_row = None
+        rows_by_player_name = {}
+        for row_number in range(1, worksheet.max_row + 1):
+            first_value = worksheet.cell(row_number, 1).value
+            third_value = worksheet.cell(row_number, 3).value
+            if first_value == winning_team_name and third_value == "Vitoria do time":
+                winning_team_row = row_number
+            if first_value in {attendance.display_name for attendance in attendances}:
+                rows_by_player_name[first_value] = row_number
+
+        self.assertIsNotNone(winning_team_row)
+        worksheet.cell(winning_team_row, 4, "SIM")
         for attendance in attendances:
-            goals = 2 if attendance.id == target_attendance.id else 0
-            assists = 1 if attendance.id == target_attendance.id else 2 if attendance.id == assistant_attendance.id else 0
-            rows.append(
-                ";".join(
-                    [
-                        "JOGADOR",
-                        str(attendance.assigned_team_number or ""),
-                        attendance.assigned_team_name,
-                        str(attendance.id),
-                        str(attendance.player_id or ""),
-                        attendance.display_name,
-                        "Mensalista",
-                        str(goals),
-                        str(assists),
-                        "",
-                    ]
-                )
+            row_number = rows_by_player_name[attendance.display_name]
+            worksheet.cell(row_number, 3, 2 if attendance.id == target_attendance.id else 0)
+            worksheet.cell(
+                row_number,
+                4,
+                1 if attendance.id == target_attendance.id else 2 if attendance.id == assistant_attendance.id else 0,
             )
+
+        output = io.BytesIO()
+        workbook.save(output)
         uploaded_file = SimpleUploadedFile(
-            "estatisticas.csv",
-            "\n".join(rows).encode("utf-8"),
-            content_type="text/csv",
+            "estatisticas.xlsx",
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
         import_response = self.client.post(

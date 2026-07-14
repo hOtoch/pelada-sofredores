@@ -419,7 +419,7 @@ async function requestBlob(path: string, init?: RequestInit, token?: string) {
   const filenameMatch = /filename="([^"]+)"/.exec(disposition);
   return {
     blob: await response.blob(),
-    filename: filenameMatch?.[1] ?? "estatisticas-pelada.csv",
+    filename: filenameMatch?.[1] ?? "estatisticas-pelada.xlsx",
   };
 }
 
