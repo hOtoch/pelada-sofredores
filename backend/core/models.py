@@ -326,3 +326,56 @@ class MatchPlayerRating(TimestampedModel):
 
     def __str__(self) -> str:
         return f"{self.match} - {self.rater_user or self.rater} -> {self.rated_attendance}: {self.score}"
+
+
+class MatchPlayerStat(TimestampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    match = models.ForeignKey(
+        Match,
+        related_name="player_stats",
+        on_delete=models.CASCADE,
+    )
+    attendance = models.ForeignKey(
+        MatchAttendance,
+        related_name="player_stats",
+        on_delete=models.CASCADE,
+    )
+    player = models.ForeignKey(
+        Player,
+        related_name="match_stats",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    display_name = models.CharField(max_length=120)
+    team_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    team_name = models.CharField(max_length=32, blank=True)
+    goals = models.PositiveSmallIntegerField(default=0)
+    assists = models.PositiveSmallIntegerField(default=0)
+    team_won = models.BooleanField(default=False)
+    imported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="imported_match_stats",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    source_label = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        db_table = "match_player_stats"
+        ordering = ("match_id", "team_number", "display_name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("match", "attendance"),
+                name="unique_stat_per_match_attendance",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("match", "team_number")),
+            models.Index(fields=("player",)),
+            models.Index(fields=("team_won",)),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.match} - {self.display_name}: {self.goals}G/{self.assists}A"

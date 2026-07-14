@@ -2284,6 +2284,120 @@ select.input-field option:checked {
   min-width: 150px;
 }
 
+.ranking-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 1rem;
+}
+
+.ranking-admin-card {
+  padding: 1.35rem;
+}
+
+.ranking-admin-actions {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 1rem;
+  align-items: end;
+  margin-top: 1rem;
+}
+
+.ranking-match-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ranking-match-select span {
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+}
+
+.ranking-sheet-actions {
+  justify-content: flex-end;
+}
+
+.ranking-card {
+  padding: 1.35rem;
+}
+
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.ranking-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.ranking-position {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.ranking-player {
+  min-width: 0;
+}
+
+.ranking-player strong,
+.ranking-player small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.ranking-metric {
+  display: inline-flex;
+  min-width: 58px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18rem;
+  border-radius: 8px;
+  background: rgba(124, 58, 237, 0.18);
+  color: #ede9fe;
+}
+
+.ranking-metric strong {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.ranking-metric span {
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.ranking-metric.goals {
+  background: rgba(52, 211, 153, 0.16);
+  color: #bbf7d0;
+}
+
+.ranking-metric.assists {
+  background: rgba(96, 165, 250, 0.16);
+  color: #bfdbfe;
+}
+
+.ranking-metric.wins {
+  background: rgba(250, 204, 21, 0.14);
+  color: #fef3c7;
+}
+
 @media (max-width: 900px) {
   .login-brand-block {
     flex-direction: column;
@@ -2438,6 +2552,23 @@ select.input-field option:checked {
   .transaction-item {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .ranking-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .ranking-metric {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .ranking-admin-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .ranking-sheet-actions {
+    justify-content: flex-start;
   }
 
   .transaction-meta {

@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
-from core.models import Match, MatchAttendance, MatchPlayerRating, Player, Role, Transaction, User
+from core.models import Match, MatchAttendance, MatchPlayerRating, MatchPlayerStat, Player, Role, Transaction, User
 
 
 class ApiFlowTests(APITestCase):
@@ -394,6 +395,87 @@ class ApiFlowTests(APITestCase):
         self.assertFalse(
             MatchAttendance.objects.filter(match=self.match).exclude(assigned_team_name="").exists()
         )
+
+    def test_admin_can_export_import_match_stats_and_update_sports_ranking(self) -> None:
+        self.client.post(
+            f"/api/matches/{self.match.id}/generate-teams/",
+            {"team_count": 2},
+            format="json",
+        )
+        attendances = list(
+            MatchAttendance.objects.filter(match=self.match)
+            .select_related("player")
+            .order_by("assigned_team_number", "display_name")
+        )
+        target_attendance = attendances[0]
+        assistant_attendance = attendances[1]
+        winning_team_number = target_attendance.assigned_team_number
+        winning_team_name = target_attendance.assigned_team_name
+
+        export_response = self.client.get(f"/api/matches/{self.match.id}/stats-sheet/")
+        self.assertEqual(export_response.status_code, 200)
+        self.assertIn("text/csv", export_response["Content-Type"])
+        self.assertIn(str(target_attendance.id), export_response.content.decode("utf-8-sig"))
+
+        rows = [
+            "tipo;time_numero;time;attendance_id;jogador_id;jogador;perfil;gols;assistencias;vitoria_time",
+            f"TIME;{winning_team_number};{winning_team_name};;;;;;;sim",
+        ]
+        for attendance in attendances:
+            goals = 2 if attendance.id == target_attendance.id else 0
+            assists = 1 if attendance.id == target_attendance.id else 2 if attendance.id == assistant_attendance.id else 0
+            rows.append(
+                ";".join(
+                    [
+                        "JOGADOR",
+                        str(attendance.assigned_team_number or ""),
+                        attendance.assigned_team_name,
+                        str(attendance.id),
+                        str(attendance.player_id or ""),
+                        attendance.display_name,
+                        "Mensalista",
+                        str(goals),
+                        str(assists),
+                        "",
+                    ]
+                )
+            )
+        uploaded_file = SimpleUploadedFile(
+            "estatisticas.csv",
+            "\n".join(rows).encode("utf-8"),
+            content_type="text/csv",
+        )
+
+        import_response = self.client.post(
+            f"/api/matches/{self.match.id}/import-stats-sheet/",
+            {"file": uploaded_file},
+            format="multipart",
+        )
+        ranking_response = self.client.get("/api/analytics/sports-ranking/?limit=10")
+
+        self.assertEqual(import_response.status_code, 200)
+        self.assertEqual(import_response.data["players_processed"], len(attendances))
+        self.assertEqual(import_response.data["goals_total"], 2)
+        self.assertEqual(import_response.data["assists_total"], 3)
+        self.assertEqual(MatchPlayerStat.objects.filter(match=self.match).count(), len(attendances))
+        self.assertTrue(
+            MatchPlayerStat.objects.filter(
+                match=self.match,
+                team_number=winning_team_number,
+                team_won=True,
+            ).exists()
+        )
+        self.assertEqual(ranking_response.status_code, 200)
+        self.assertEqual(ranking_response.data["top_scorers"][0]["player_id"], str(target_attendance.player_id))
+        self.assertEqual(ranking_response.data["top_scorers"][0]["goals"], 2)
+        self.assertEqual(ranking_response.data["top_assistants"][0]["player_id"], str(assistant_attendance.player_id))
+        self.assertEqual(ranking_response.data["top_assistants"][0]["assists"], 2)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+        common_ranking_response = self.client.get("/api/analytics/sports-ranking/?limit=10")
+        common_export_response = self.client.get(f"/api/matches/{self.match.id}/stats-sheet/")
+        self.assertEqual(common_ranking_response.status_code, 200)
+        self.assertEqual(common_export_response.status_code, 403)
 
     def test_overall_history_lists_member_snapshots_for_all_authenticated_users(self) -> None:
         self.match.status = Match.Status.CLOSED

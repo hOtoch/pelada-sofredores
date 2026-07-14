@@ -206,6 +206,29 @@ export interface OverallHistorySnapshot {
   matches: OverallHistoryMatch[];
 }
 
+export interface SportsRankingEntry {
+  playerId?: string | null;
+  playerName: string;
+  goals: number;
+  assists: number;
+  wins: number;
+}
+
+export interface SportsRankingSnapshot {
+  topScorers: SportsRankingEntry[];
+  topAssistants: SportsRankingEntry[];
+  topWinners: SportsRankingEntry[];
+}
+
+export interface MatchStatsImportSummary {
+  matchId: string;
+  playersProcessed: number;
+  goalsTotal: number;
+  assistsTotal: number;
+  winningTeams: string[];
+  replacedExisting: number;
+}
+
 export interface MatchPlayerRatingInput {
   attendanceId: string;
   score: number;

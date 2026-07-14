@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import csv
+import io
+import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 
+from django.http import HttpResponse
 from django.db import transaction
 from django.db.models import Case, Count, DecimalField, F, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
@@ -11,13 +15,14 @@ from rest_framework import status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.teams import BalanceablePlayer, GreedyTeamBalancer, TeamBalanceConfig, TeamGenerationRequest
 
-from .models import Match, MatchAttendance, MatchPlayerRating, Player, Role, Transaction, User
+from .models import Match, MatchAttendance, MatchPlayerRating, MatchPlayerStat, Player, Role, Transaction, User
 from .permissions import IsAdminOrReadOnly
 from .serializers import (
     AdminResetPasswordSerializer,
@@ -27,6 +32,7 @@ from .serializers import (
     MatchAttendanceSerializer,
     MatchPlayerRatingStateSerializer,
     MatchPlayerRatingSubmitSerializer,
+    MatchStatsImportSummarySerializer,
     MatchSerializer,
     PaymentRankingSerializer,
     PlayerSerializer,
@@ -34,6 +40,7 @@ from .serializers import (
     PresenceRankingSerializer,
     PublicSignupSerializer,
     SeasonOverviewSerializer,
+    SportsRankingSerializer,
     TeamGenerationInputSerializer,
     TeamGenerationResponseSerializer,
     TransactionSerializer,
@@ -332,6 +339,307 @@ def finalize_due_match_ratings() -> None:
         finalize_match_ratings_if_due(match)
 
 
+MATCH_STATS_CSV_HEADERS = [
+    "tipo",
+    "time_numero",
+    "time",
+    "attendance_id",
+    "jogador_id",
+    "jogador",
+    "perfil",
+    "gols",
+    "assistencias",
+    "vitoria_time",
+]
+TRUTHY_CSV_VALUES = {"1", "x", "s", "sim", "true", "verdadeiro", "vitoria", "ganhou", "win", "yes"}
+
+
+def normalize_csv_key(value: str | None) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    return "".join(character for character in ascii_value.lower() if character.isalnum())
+
+
+def normalize_csv_value(value: object) -> str:
+    return str(value or "").strip()
+
+
+def csv_row_value(row: dict, *keys: str) -> str:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return normalize_csv_value(value)
+    return ""
+
+
+def parse_csv_integer(value: str, field_name: str) -> int:
+    if not value:
+        return 0
+    try:
+        parsed = int(Decimal(value.replace(",", ".")))
+    except Exception as exc:
+        raise ValidationError({field_name: f"Valor invalido: {value}."}) from exc
+    if parsed < 0:
+        raise ValidationError({field_name: "Use zero ou um numero positivo."})
+    return parsed
+
+
+def parse_csv_boolean(value: str) -> bool:
+    return normalize_csv_key(value) in TRUTHY_CSV_VALUES
+
+
+def get_attendance_team_key(attendance: MatchAttendance) -> tuple[str, str] | None:
+    if attendance.assigned_team_number is not None:
+        return ("number", str(attendance.assigned_team_number))
+    if attendance.assigned_team_name:
+        return ("name", normalize_csv_key(attendance.assigned_team_name))
+    return None
+
+
+def get_row_team_key(row: dict) -> tuple[str, str] | None:
+    team_number = csv_row_value(row, "timenumero", "numerotime", "timeid")
+    if team_number:
+        return ("number", team_number)
+    team_name = csv_row_value(row, "time", "timenome", "equipe")
+    if team_name:
+        return ("name", normalize_csv_key(team_name))
+    return None
+
+
+def decode_uploaded_csv(uploaded_file) -> str:
+    raw_content = uploaded_file.read()
+    try:
+        return raw_content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw_content.decode("cp1252")
+
+
+def read_match_stats_csv(uploaded_file) -> list[dict]:
+    content = decode_uploaded_csv(uploaded_file)
+    if not content.strip():
+        raise ValidationError({"file": "A planilha esta vazia."})
+
+    sample = content[:2048]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=";,")
+    except csv.Error:
+        dialect = csv.excel
+        dialect.delimiter = ";"
+
+    reader = csv.DictReader(io.StringIO(content), dialect=dialect)
+    if not reader.fieldnames:
+        raise ValidationError({"file": "A planilha precisa ter uma linha de cabecalho."})
+
+    normalized_rows = []
+    for row in reader:
+        normalized_rows.append({normalize_csv_key(key): value for key, value in row.items() if key})
+    return normalized_rows
+
+
+def build_match_stats_csv_response(match: Match) -> HttpResponse:
+    buffer = io.StringIO()
+    buffer.write("\ufeff")
+    writer = csv.writer(buffer, delimiter=";", lineterminator="\n")
+    writer.writerow(MATCH_STATS_CSV_HEADERS)
+
+    attendance_entries = list(
+        match.attendance_entries.select_related("player")
+        .filter(attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED)
+        .order_by("assigned_team_number", "assigned_team_name", "display_name")
+    )
+    stats_by_attendance_id = {
+        stat.attendance_id: stat
+        for stat in MatchPlayerStat.objects.filter(match=match)
+    }
+    team_numbers = sorted(
+        {
+            entry.assigned_team_number
+            for entry in attendance_entries
+            if entry.assigned_team_number is not None
+        }
+    )
+
+    for team_number in team_numbers:
+        team_entries = [entry for entry in attendance_entries if entry.assigned_team_number == team_number]
+        team_name = team_entries[0].assigned_team_name or f"Time {team_number}"
+        team_won = any(stats_by_attendance_id.get(entry.id) and stats_by_attendance_id[entry.id].team_won for entry in team_entries)
+        writer.writerow(["TIME", team_number, team_name, "", "", "", "", "", "", "1" if team_won else ""])
+        for entry in team_entries:
+            stat = stats_by_attendance_id.get(entry.id)
+            writer.writerow(
+                [
+                    "JOGADOR",
+                    team_number,
+                    team_name,
+                    entry.id,
+                    entry.player_id or "",
+                    entry.display_name,
+                    "Convidado" if entry.is_guest else "Mensalista",
+                    stat.goals if stat else "",
+                    stat.assists if stat else "",
+                    "",
+                ]
+            )
+
+    unassigned_entries = [entry for entry in attendance_entries if entry.assigned_team_number is None]
+    if unassigned_entries:
+        writer.writerow(["TIME", "", "Sem time", "", "", "", "", "", "", ""])
+        for entry in unassigned_entries:
+            stat = stats_by_attendance_id.get(entry.id)
+            writer.writerow(
+                [
+                    "JOGADOR",
+                    "",
+                    entry.assigned_team_name or "Sem time",
+                    entry.id,
+                    entry.player_id or "",
+                    entry.display_name,
+                    "Convidado" if entry.is_guest else "Mensalista",
+                    stat.goals if stat else "",
+                    stat.assists if stat else "",
+                    "1" if stat and stat.team_won else "",
+                ]
+            )
+
+    filename = f"estatisticas-pelada-{match.scheduled_at.date().isoformat()}.csv"
+    response = HttpResponse(buffer.getvalue(), content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def import_match_stats_from_csv(match: Match, uploaded_file, user: User) -> dict:
+    rows = read_match_stats_csv(uploaded_file)
+    attendance_entries = list(
+        match.attendance_entries.select_related("player")
+        .filter(attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED)
+    )
+    attendance_by_id = {str(entry.id): entry for entry in attendance_entries}
+    parsed_stats_by_attendance_id = {}
+    winning_team_keys = set()
+    player_rows_found = 0
+
+    for row in rows:
+        row_type = normalize_csv_key(csv_row_value(row, "tipo", "type"))
+        attendance_id = csv_row_value(row, "attendanceid", "presencaid", "idpresenca", "idpresenca")
+        is_player_row = row_type in {"jogador", "player"} or bool(attendance_id)
+        is_team_row = row_type in {"time", "team", "equipe"} and not is_player_row
+        team_won = parse_csv_boolean(csv_row_value(row, "vitoriatime", "vitoria", "ganhou", "win"))
+
+        if team_won:
+            team_key = get_row_team_key(row)
+            if team_key:
+                winning_team_keys.add(team_key)
+
+        if is_team_row:
+            continue
+        if not is_player_row:
+            continue
+        if not attendance_id:
+            raise ValidationError({"attendance_id": "Linhas de jogador precisam manter o attendance_id exportado."})
+
+        attendance_entry = attendance_by_id.get(attendance_id)
+        if not attendance_entry:
+            raise ValidationError({"attendance_id": f"Presenca desconhecida nesta pelada: {attendance_id}."})
+        if attendance_id in parsed_stats_by_attendance_id:
+            raise ValidationError({"attendance_id": f"Presenca duplicada na planilha: {attendance_id}."})
+
+        player_rows_found += 1
+        parsed_stats_by_attendance_id[attendance_id] = {
+            "goals": parse_csv_integer(csv_row_value(row, "gols", "gol", "goals"), "gols"),
+            "assists": parse_csv_integer(
+                csv_row_value(row, "assistencias", "assistencia", "assists", "assist"),
+                "assistencias",
+            ),
+        }
+
+    if player_rows_found == 0:
+        raise ValidationError({"file": "Nenhuma linha de jogador foi encontrada na planilha."})
+
+    replaced_existing = MatchPlayerStat.objects.filter(match=match).count()
+    stats_to_create = []
+    for attendance_entry in attendance_entries:
+        imported_values = parsed_stats_by_attendance_id.get(
+            str(attendance_entry.id),
+            {"goals": 0, "assists": 0},
+        )
+        team_key = get_attendance_team_key(attendance_entry)
+        stats_to_create.append(
+            MatchPlayerStat(
+                match=match,
+                attendance=attendance_entry,
+                player=attendance_entry.player,
+                display_name=attendance_entry.display_name,
+                team_number=attendance_entry.assigned_team_number,
+                team_name=attendance_entry.assigned_team_name,
+                goals=imported_values["goals"],
+                assists=imported_values["assists"],
+                team_won=bool(team_key and team_key in winning_team_keys),
+                imported_by=user,
+                source_label=getattr(uploaded_file, "name", "")[:120],
+            )
+        )
+
+    with transaction.atomic():
+        MatchPlayerStat.objects.filter(match=match).delete()
+        MatchPlayerStat.objects.bulk_create(stats_to_create)
+
+    return {
+        "match_id": match.id,
+        "players_processed": len(stats_to_create),
+        "goals_total": sum(stat.goals for stat in stats_to_create),
+        "assists_total": sum(stat.assists for stat in stats_to_create),
+        "winning_teams": sorted(
+            {
+                stat.team_name or f"Time {stat.team_number}"
+                for stat in stats_to_create
+                if stat.team_won
+            }
+        ),
+        "replaced_existing": replaced_existing,
+    }
+
+
+def build_sports_ranking(limit: int) -> dict:
+    aggregated = {}
+    for stat in MatchPlayerStat.objects.select_related("player"):
+        key = stat.player_id or f"guest:{normalize_csv_key(stat.display_name)}"
+        entry = aggregated.setdefault(
+            key,
+            {
+                "player_id": stat.player_id,
+                "player_name": stat.player.full_name if stat.player_id else stat.display_name,
+                "goals": 0,
+                "assists": 0,
+                "wins": 0,
+            },
+        )
+        entry["goals"] += stat.goals
+        entry["assists"] += stat.assists
+        entry["wins"] += 1 if stat.team_won else 0
+
+    entries = list(aggregated.values())
+
+    def top_by(primary: str, *secondary: str):
+        return [
+            entry
+            for entry in sorted(
+                entries,
+                key=lambda item: (
+                    -item[primary],
+                    *(-item[field] for field in secondary),
+                    item["player_name"].lower(),
+                ),
+            )
+            if entry[primary] > 0
+        ][:limit]
+
+    return {
+        "top_scorers": top_by("goals", "assists", "wins"),
+        "top_assistants": top_by("assists", "goals", "wins"),
+        "top_winners": top_by("wins", "goals", "assists"),
+    }
+
+
 class IsRoleAdmin(BasePermission):
     def has_permission(self, request, view):
         return bool(
@@ -381,6 +689,8 @@ class MatchViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
 
     def get_permissions(self):
+        if self.action in {"export_stats_sheet", "import_stats_sheet"}:
+            return [IsRoleAdmin()]
         if self.action == "player_ratings":
             return [IsAuthenticated()]
         return super().get_permissions()
@@ -519,6 +829,27 @@ class MatchViewSet(viewsets.ModelViewSet):
             match.save(update_fields=["teams_generated_at", "updated_at"])
 
         return Response(self.get_serializer(match).data)
+
+    @action(detail=True, methods=["get"], url_path="stats-sheet")
+    def export_stats_sheet(self, request, pk=None):
+        match = self.get_object()
+        return build_match_stats_csv_response(match)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="import-stats-sheet",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_stats_sheet(self, request, pk=None):
+        match = self.get_object()
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            raise ValidationError({"file": "Envie um arquivo CSV no campo file."})
+
+        summary = import_match_stats_from_csv(match, uploaded_file, request.user)
+        serializer = MatchStatsImportSummarySerializer(summary)
+        return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="overall-history")
     def overall_history(self, request):
@@ -1430,4 +1761,18 @@ class PaymentRankingView(APIView):
             "ranking": ranking[: max(limit, 1)],
         }
         serializer = PaymentRankingSerializer(payload)
+        return Response(serializer.data)
+
+
+class SportsRankingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit", "20"))
+        except ValueError as exc:
+            raise ValidationError({"limit": "Forneca um numero inteiro."}) from exc
+
+        payload = build_sports_ranking(max(1, min(limit, 50)))
+        serializer = SportsRankingSerializer(payload)
         return Response(serializer.data)

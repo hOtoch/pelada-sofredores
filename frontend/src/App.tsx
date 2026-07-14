@@ -8,6 +8,7 @@ import { CommonUserPortalPage } from "./pages/CommonUserPortalPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MyAccountPage } from "./pages/MyAccountPage";
 import { PreMatchPage } from "./pages/PreMatchPage";
+import { RankingPage } from "./pages/RankingPage";
 import { RosterPage } from "./pages/RosterPage";
 import type { TransactionFormValues } from "./features/dashboard/contracts";
 import type {
@@ -22,10 +23,12 @@ import type {
   GeneratedTeam,
   MatchPlayerRatingInput,
   MatchPlayerRatingState,
+  MatchStatsImportSummary,
   MatchSummary,
   OverallHistorySnapshot,
   PlayerRatings,
   PlayerSummary,
+  SportsRankingSnapshot,
   TransactionRecord,
 } from "./domain/types";
 import type {
@@ -52,6 +55,7 @@ import {
   createPlayer as createPlayerRequest,
   createTransaction as createTransactionRequest,
   deleteAttendance as deleteAttendanceRequest,
+  downloadMatchStatsSheet,
   patchMatchStatus as patchMatchStatusRequest,
   patchMatchResult as patchMatchResultRequest,
   finalizeMatchRatings,
@@ -64,7 +68,9 @@ import {
   getPortalOverview,
   getPresenceRanking,
   getSeasonOverview,
+  getSportsRanking,
   getOverallHistory,
+  importMatchStatsSheet,
   listAttendance,
   listGuestFeeDebts,
   listMatches,
@@ -90,7 +96,15 @@ import {
   waiveGuestFee as waiveGuestFeeRequest,
 } from "./lib/api";
 
-type NavigationIcon = "finance" | "roster" | "accounts" | "match" | "ratings" | "portal" | "my-account";
+type NavigationIcon =
+  | "finance"
+  | "roster"
+  | "accounts"
+  | "match"
+  | "ratings"
+  | "ranking"
+  | "portal"
+  | "my-account";
 
 type NavigationItem = {
   label: string;
@@ -103,6 +117,7 @@ const adminNavigation: NavigationItem[] = [
   { label: "Elenco", path: "/roster", icon: "roster" },
   { label: "Contas", path: "/accounts", icon: "accounts" },
   { label: "Pré-Jogo", path: "/pre-match", icon: "match" },
+  { label: "Ranking", path: "/ranking", icon: "ranking" },
   { label: "Notas", path: "/ratings", icon: "ratings" },
   { label: "Minha conta", path: "/my-account", icon: "my-account" },
 ];
@@ -111,6 +126,7 @@ const commonNavigation: NavigationItem[] = [
   { label: "Extrato", path: "/portal", icon: "finance" },
   { label: "Elenco", path: "/roster", icon: "roster" },
   { label: "Peladas", path: "/pre-match", icon: "match" },
+  { label: "Ranking", path: "/ranking", icon: "ranking" },
   { label: "Notas", path: "/ratings", icon: "ratings" },
   { label: "Minha conta", path: "/my-account", icon: "my-account" },
 ];
@@ -130,6 +146,12 @@ const defaultRosterFilters: PlayerFilterState = {
   search: "",
   position: "ALL",
   status: "ACTIVE",
+};
+
+const emptySportsRanking: SportsRankingSnapshot = {
+  topScorers: [],
+  topAssistants: [],
+  topWinners: [],
 };
 
 const currentReferenceMonth = () => new Date().toISOString().slice(0, 7);
@@ -232,10 +254,20 @@ function SidebarNavIcon({ icon }: { icon: NavigationIcon }) {
         </svg>
       );
     case "ratings":
+    case "ranking":
       return (
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 3.8l2.35 4.76 5.25.76-3.8 3.7.9 5.22L12 15.78l-4.7 2.46.9-5.22-3.8-3.7 5.25-.76L12 3.8z" />
-          <path d="M9.2 11.9l1.8 1.8 3.9-4.1" />
+          {icon === "ranking" ? (
+            <>
+              <path d="M7 20V10.5h3.8V20M10.1 20V5h3.8v15M13.2 20v-7h3.8v7" />
+              <path d="M4.2 20h15.6" />
+            </>
+          ) : (
+            <>
+              <path d="M12 3.8l2.35 4.76 5.25.76-3.8 3.7.9 5.22L12 15.78l-4.7 2.46.9-5.22-3.8-3.7 5.25-.76L12 3.8z" />
+              <path d="M9.2 11.9l1.8 1.8 3.9-4.1" />
+            </>
+          )}
         </svg>
       );
     default:
@@ -310,6 +342,23 @@ function buildPortalRecentTeams(
     });
 }
 
+function downloadBlobFile(filename: string, blob: Blob) {
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+}
+
+function formatStatsImportSummary(summary: MatchStatsImportSummary) {
+  const winningTeamsLabel =
+    summary.winningTeams.length > 0 ? summary.winningTeams.join(", ") : "nenhum time marcado";
+  return `${summary.playersProcessed} jogador(es), ${summary.goalsTotal} gol(s), ${summary.assistsTotal} assistência(s), vencedor: ${winningTeamsLabel}.`;
+}
+
 type ToastTone = "success" | "error" | "warning";
 
 type AppToast = {
@@ -339,6 +388,7 @@ export default function App() {
   const [seasonOverview, setSeasonOverview] = useState<DashboardSeasonOverviewSnapshot | null>(null);
   const [presenceRanking, setPresenceRanking] = useState<DashboardPresenceRankingEntry[]>([]);
   const [paymentRanking, setPaymentRanking] = useState<DashboardPaymentRankingEntry[]>([]);
+  const [sportsRanking, setSportsRanking] = useState<SportsRankingSnapshot>(emptySportsRanking);
   const [portalLinkedPlayer, setPortalLinkedPlayer] = useState<PlayerSummary | null>(null);
   const [portalFinance, setPortalFinance] = useState<PersonalFinanceSnapshot>(emptyPortalFinance);
   const [portalRecentAttendance, setPortalRecentAttendance] = useState<PersonalAttendanceSnapshot[]>([]);
@@ -354,9 +404,11 @@ export default function App() {
   const [isRosterLoading, setIsRosterLoading] = useState(false);
   const [isPreMatchLoading, setIsPreMatchLoading] = useState(false);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
+  const [isRankingLoading, setIsRankingLoading] = useState(false);
   const [isGeneratingTeams, setIsGeneratingTeams] = useState(false);
   const [isClearingTeams, setIsClearingTeams] = useState(false);
   const [isSubmittingMatch, setIsSubmittingMatch] = useState(false);
+  const [isImportingStatsSheet, setIsImportingStatsSheet] = useState(false);
   const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
   const [isFinalizingRatings, setIsFinalizingRatings] = useState(false);
   const [isRecalculatingRatings, setIsRecalculatingRatings] = useState(false);
@@ -466,6 +518,7 @@ export default function App() {
       setSeasonOverview(null);
       setPresenceRanking([]);
       setPaymentRanking([]);
+      setSportsRanking(emptySportsRanking);
       setPortalLinkedPlayer(null);
       setPortalFinance(emptyPortalFinance);
       setPortalRecentAttendance([]);
@@ -517,6 +570,7 @@ export default function App() {
       setIsRosterLoading(true);
       setIsPreMatchLoading(true);
       setIsPortalLoading(currentUser.role === "COMMON");
+      setIsRankingLoading(true);
 
       try {
         const adminPromise =
@@ -538,6 +592,7 @@ export default function App() {
           squad,
           matchData,
           overallHistoryData,
+          sportsRankingData,
           portalData,
           adminData,
         ] = await Promise.all([
@@ -545,6 +600,7 @@ export default function App() {
           listPlayers(token),
           fetchMatchData(token),
           getOverallHistory(token),
+          getSportsRanking(token, 20),
           portalPromise,
           adminPromise,
         ]);
@@ -558,6 +614,7 @@ export default function App() {
         setGuestFeeDebts(nextGuestFeeDebts);
         setPlayers(squad);
         setOverallHistory(overallHistoryData);
+        setSportsRanking(sportsRankingData);
         const visibleMatches =
           currentUser.role === "COMMON"
             ? matchData.matches.filter((entry) => entry.status !== "DRAFT")
@@ -591,6 +648,7 @@ export default function App() {
           setIsRosterLoading(false);
           setIsPreMatchLoading(false);
           setIsPortalLoading(false);
+          setIsRankingLoading(false);
         }
       }
     };
@@ -735,6 +793,7 @@ export default function App() {
     setSeasonOverview(null);
     setPresenceRanking([]);
     setPaymentRanking([]);
+    setSportsRanking(emptySportsRanking);
     setPortalLinkedPlayer(null);
     setPortalFinance(emptyPortalFinance);
     setPortalRecentAttendance([]);
@@ -793,6 +852,44 @@ export default function App() {
       reportError("Falha ao desfazer times.", error);
     } finally {
       setIsClearingTeams(false);
+    }
+  };
+
+  const handleExportStatsSheet = async () => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setScreenError(undefined);
+
+    try {
+      const { blob, filename } = await downloadMatchStatsSheet(token, currentMatch.id);
+      downloadBlobFile(filename, blob);
+      reportSuccess("Planilha da pelada exportada.");
+    } catch (error) {
+      reportError("Falha ao exportar a planilha da pelada.", error);
+      throw error;
+    }
+  };
+
+  const handleImportStatsSheet = async (file: File) => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsImportingStatsSheet(true);
+    setScreenError(undefined);
+
+    try {
+      const summary = await importMatchStatsSheet(token, currentMatch.id, file);
+      const nextSportsRanking = await getSportsRanking(token, 20);
+      setSportsRanking(nextSportsRanking);
+      reportSuccess(`Planilha importada. ${formatStatsImportSummary(summary)}`);
+    } catch (error) {
+      reportError("Falha ao importar a planilha preenchida.", error);
+      throw error;
+    } finally {
+      setIsImportingStatsSheet(false);
     }
   };
 
@@ -1785,6 +1882,22 @@ export default function App() {
                 onRecalculateRatings={() => handleRecalculateRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
               />
+            )}
+          />
+          <Route
+            path="/ranking"
+            element={renderProtected(
+              <RankingPage
+                ranking={sportsRanking}
+                isLoading={isRankingLoading}
+                matches={matches}
+                selectedMatch={currentMatch}
+                canManageStatsSheet={isAdmin}
+                isImportingStatsSheet={isImportingStatsSheet}
+                onSelectMatch={(matchId) => handleSelectMatch(matchId)}
+                onExportStatsSheet={() => handleExportStatsSheet()}
+                onImportStatsSheet={(file) => handleImportStatsSheet(file)}
+              />,
             )}
           />
           <Route

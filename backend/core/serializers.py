@@ -546,3 +546,26 @@ class PaymentRankingItemSerializer(serializers.Serializer):
 class PaymentRankingSerializer(serializers.Serializer):
     reference_month = serializers.CharField()
     ranking = PaymentRankingItemSerializer(many=True)
+
+
+class MatchStatsImportSummarySerializer(serializers.Serializer):
+    match_id = serializers.UUIDField()
+    players_processed = serializers.IntegerField()
+    goals_total = serializers.IntegerField()
+    assists_total = serializers.IntegerField()
+    winning_teams = serializers.ListField(child=serializers.CharField())
+    replaced_existing = serializers.IntegerField()
+
+
+class SportsRankingItemSerializer(serializers.Serializer):
+    player_id = serializers.UUIDField(allow_null=True)
+    player_name = serializers.CharField()
+    goals = serializers.IntegerField()
+    assists = serializers.IntegerField()
+    wins = serializers.IntegerField()
+
+
+class SportsRankingSerializer(serializers.Serializer):
+    top_scorers = SportsRankingItemSerializer(many=True)
+    top_assistants = SportsRankingItemSerializer(many=True)
+    top_winners = SportsRankingItemSerializer(many=True)

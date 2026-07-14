@@ -6,6 +6,7 @@ from .views import (
     PortalOverviewView,
     PresenceRankingView,
     SeasonOverviewView,
+    SportsRankingView,
     AuthLoginView,
     AuthSignupView,
     AuthLogoutView,
@@ -37,5 +38,6 @@ urlpatterns = [
     path("analytics/season-overview/", SeasonOverviewView.as_view(), name="analytics-season-overview"),
     path("analytics/presence-ranking/", PresenceRankingView.as_view(), name="analytics-presence-ranking"),
     path("analytics/payment-ranking/", PaymentRankingView.as_view(), name="analytics-payment-ranking"),
+    path("analytics/sports-ranking/", SportsRankingView.as_view(), name="analytics-sports-ranking"),
     *router.urls,
 ]

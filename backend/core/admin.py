@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Match, MatchAttendance, MatchPlayerRating, Player, Transaction, User
+from .models import Match, MatchAttendance, MatchPlayerRating, MatchPlayerStat, Player, Transaction, User
 
 
 @admin.register(User)
@@ -56,3 +56,18 @@ class MatchPlayerRatingAdmin(admin.ModelAdmin):
         "rated_attendance__display_name",
         "rated_player__full_name",
     )
+
+
+@admin.register(MatchPlayerStat)
+class MatchPlayerStatAdmin(admin.ModelAdmin):
+    list_display = (
+        "match",
+        "display_name",
+        "team_name",
+        "goals",
+        "assists",
+        "team_won",
+        "imported_by",
+    )
+    list_filter = ("team_won", "team_name")
+    search_fields = ("display_name", "player__full_name", "match__location")

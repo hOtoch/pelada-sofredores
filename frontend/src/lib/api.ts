@@ -5,8 +5,10 @@ import type {
   GeneratedTeam,
   MatchSummary,
   MatchPlayerRatingState,
+  MatchStatsImportSummary,
   OverallHistorySnapshot,
   PlayerSummary,
+  SportsRankingSnapshot,
   TeamGenerationResult,
   TransactionRecord,
 } from "../domain/types";
@@ -307,6 +309,29 @@ type RawPaymentRanking = {
   }>;
 };
 
+type RawSportsRankingEntry = {
+  player_id: string | null;
+  player_name: string;
+  goals: number;
+  assists: number;
+  wins: number;
+};
+
+type RawSportsRanking = {
+  top_scorers: RawSportsRankingEntry[];
+  top_assistants: RawSportsRankingEntry[];
+  top_winners: RawSportsRankingEntry[];
+};
+
+type RawMatchStatsImportSummary = {
+  match_id: string;
+  players_processed: number;
+  goals_total: number;
+  assists_total: number;
+  winning_teams: string[];
+  replaced_existing: number;
+};
+
 class ApiError extends Error {
   status: number;
 
@@ -349,7 +374,7 @@ async function request<T>(path: string, init?: RequestInit, token?: string): Pro
     headers.set("Authorization", `Token ${token}`);
   }
 
-  if (init?.body && !headers.has("Content-Type")) {
+  if (init?.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -370,6 +395,32 @@ async function request<T>(path: string, init?: RequestInit, token?: string): Pro
   }
 
   return data as T;
+}
+
+async function requestBlob(path: string, init?: RequestInit, token?: string) {
+  const headers = new Headers(init?.headers);
+
+  if (token) {
+    headers.set("Authorization", `Token ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    const message = extractApiErrorMessage(data) || `Falha na chamada da API (${response.status}).`;
+    throw new ApiError(message, response.status);
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = /filename="([^"]+)"/.exec(disposition);
+  return {
+    blob: await response.blob(),
+    filename: filenameMatch?.[1] ?? "estatisticas-pelada.csv",
+  };
 }
 
 function toNumber(value: number | string | null | undefined): number {
@@ -538,6 +589,35 @@ function mapPaymentRanking(raw: RawPaymentRanking): DashboardPaymentRankingEntry
     outstandingAmount: toNumber(entry.outstanding_amount),
     isAdimplente: entry.is_adimplente,
   }));
+}
+
+function mapSportsRankingEntry(raw: RawSportsRankingEntry) {
+  return {
+    playerId: raw.player_id,
+    playerName: raw.player_name,
+    goals: raw.goals,
+    assists: raw.assists,
+    wins: raw.wins,
+  };
+}
+
+function mapSportsRanking(raw: RawSportsRanking): SportsRankingSnapshot {
+  return {
+    topScorers: raw.top_scorers.map(mapSportsRankingEntry),
+    topAssistants: raw.top_assistants.map(mapSportsRankingEntry),
+    topWinners: raw.top_winners.map(mapSportsRankingEntry),
+  };
+}
+
+function mapMatchStatsImportSummary(raw: RawMatchStatsImportSummary): MatchStatsImportSummary {
+  return {
+    matchId: raw.match_id,
+    playersProcessed: raw.players_processed,
+    goalsTotal: raw.goals_total,
+    assistsTotal: raw.assists_total,
+    winningTeams: raw.winning_teams,
+    replacedExisting: raw.replaced_existing,
+  };
 }
 
 export function mapGeneratedTeams(
@@ -836,6 +916,11 @@ export async function getPaymentRanking(token: string, referenceMonth?: string, 
   };
 }
 
+export async function getSportsRanking(token: string, limit = 20) {
+  const data = await request<RawSportsRanking>(`/analytics/sports-ranking/?limit=${limit}`, undefined, token);
+  return mapSportsRanking(data);
+}
+
 export async function logout(token: string) {
   await request("/auth/logout/", { method: "POST" }, token);
 }
@@ -1019,6 +1104,25 @@ export async function clearGeneratedTeams(token: string, matchId: string) {
     token,
   );
   return mapMatch(data);
+}
+
+export async function downloadMatchStatsSheet(token: string, matchId: string) {
+  return requestBlob(`/matches/${matchId}/stats-sheet/`, undefined, token);
+}
+
+export async function importMatchStatsSheet(token: string, matchId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const data = await request<RawMatchStatsImportSummary>(
+    `/matches/${matchId}/import-stats-sheet/`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    token,
+  );
+  return mapMatchStatsImportSummary(data);
 }
 
 export async function getMatchPlayerRatings(token: string, matchId: string) {
