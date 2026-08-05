@@ -44,6 +44,7 @@ from .serializers import (
     SportsRankingSerializer,
     TeamGenerationInputSerializer,
     TeamGenerationResponseSerializer,
+    TeamPlayerSwapSerializer,
     TransactionSerializer,
     UserAccountSerializer,
     UserProfileUpdateSerializer,
@@ -883,6 +884,52 @@ class MatchViewSet(viewsets.ModelViewSet):
             match.save(update_fields=["teams_generated_at", "updated_at"])
 
         return Response(self.get_serializer(match).data)
+
+    @action(detail=True, methods=["post"], url_path="swap-team-players")
+    def swap_team_players(self, request, pk=None):
+        serializer = TeamPlayerSwapSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        match = self.get_object()
+        source_id = serializer.validated_data["source_attendance_id"]
+        target_id = serializer.validated_data["target_attendance_id"]
+
+        with transaction.atomic():
+            entries = {
+                entry.id: entry
+                for entry in MatchAttendance.objects.select_for_update().filter(
+                    match=match,
+                    id__in=[source_id, target_id],
+                    attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+                )
+            }
+            source_entry = entries.get(source_id)
+            target_entry = entries.get(target_id)
+
+            if source_entry is None or target_entry is None:
+                raise ValidationError({"detail": "Selecione jogadores confirmados desta pelada."})
+
+            if source_entry.assigned_team_number is None or target_entry.assigned_team_number is None:
+                raise ValidationError({"detail": "Gere os times antes de trocar jogadores."})
+
+            if source_entry.assigned_team_number == target_entry.assigned_team_number:
+                raise ValidationError({"detail": "Selecione jogadores de times diferentes."})
+
+            source_team_number = source_entry.assigned_team_number
+            source_team_name = source_entry.assigned_team_name
+            source_entry.assigned_team_number = target_entry.assigned_team_number
+            source_entry.assigned_team_name = target_entry.assigned_team_name
+            target_entry.assigned_team_number = source_team_number
+            target_entry.assigned_team_name = source_team_name
+
+            source_entry.save(update_fields=["assigned_team_number", "assigned_team_name", "updated_at"])
+            target_entry.save(update_fields=["assigned_team_number", "assigned_team_name", "updated_at"])
+            match.updated_at = timezone.now()
+            match.save(update_fields=["updated_at"])
+
+        refreshed_attendance = match.attendance_entries.select_related("match", "player", "invited_by").order_by(
+            "display_name",
+        )
+        return Response(MatchAttendanceSerializer(refreshed_attendance, many=True).data)
 
     @action(detail=True, methods=["get"], url_path="stats-sheet")
     def export_stats_sheet(self, request, pk=None):

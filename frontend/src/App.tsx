@@ -87,6 +87,7 @@ import {
   registerAccount,
   createUserAccount as createUserAccountRequest,
   submitMatchPlayerRatings,
+  swapTeamPlayers,
   updateMatch as updateMatchRequest,
   updateMyAccount,
   updateTransaction as updateTransactionRequest,
@@ -407,6 +408,7 @@ export default function App() {
   const [isRankingLoading, setIsRankingLoading] = useState(false);
   const [isGeneratingTeams, setIsGeneratingTeams] = useState(false);
   const [isClearingTeams, setIsClearingTeams] = useState(false);
+  const [isSwappingTeamPlayers, setIsSwappingTeamPlayers] = useState(false);
   const [isSubmittingMatch, setIsSubmittingMatch] = useState(false);
   const [isImportingStatsSheet, setIsImportingStatsSheet] = useState(false);
   const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
@@ -852,6 +854,33 @@ export default function App() {
       reportError("Falha ao desfazer times.", error);
     } finally {
       setIsClearingTeams(false);
+    }
+  };
+
+  const handleSwapTeamPlayers = async (sourceAttendanceId: string, targetAttendanceId: string) => {
+    if (!token || !currentMatch) {
+      return;
+    }
+
+    setIsSwappingTeamPlayers(true);
+    setScreenError(undefined);
+
+    try {
+      const refreshedAttendance = await swapTeamPlayers(
+        token,
+        currentMatch.id,
+        sourceAttendanceId,
+        targetAttendanceId,
+      );
+      const nextTeams = deriveGeneratedTeams(refreshedAttendance);
+      setAttendance(refreshedAttendance);
+      setGeneratedTeams(nextTeams);
+      setAverageOverallGap(calculateAverageOverallGap(nextTeams));
+      reportSuccess("Jogadores trocados entre os times.");
+    } catch (error) {
+      reportError("Falha ao trocar jogadores entre os times.", error);
+    } finally {
+      setIsSwappingTeamPlayers(false);
     }
   };
 
@@ -1853,6 +1882,7 @@ export default function App() {
                 isLoading={isPreMatchLoading}
                 isGeneratingTeams={isGeneratingTeams}
                 isClearingTeams={isClearingTeams}
+                isSwappingTeamPlayers={isSwappingTeamPlayers}
                 isSubmittingRatings={isSubmittingRatings}
                 isFinalizingRatings={isFinalizingRatings}
                 isRecalculatingRatings={isRecalculatingRatings}
@@ -1876,6 +1906,9 @@ export default function App() {
                 onWaiveGuestFee={(attendanceId) => handleWaiveGuestFee(attendanceId)}
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
+                onSwapTeamPlayers={(sourceAttendanceId, targetAttendanceId) =>
+                  handleSwapTeamPlayers(sourceAttendanceId, targetAttendanceId)
+                }
                 ratingState={matchRatingState}
                 overallHistory={overallHistory}
                 onFinalizeRatings={() => handleFinalizeRatings()}
@@ -1915,6 +1948,7 @@ export default function App() {
                 isLoading={isPreMatchLoading}
                 isGeneratingTeams={isGeneratingTeams}
                 isClearingTeams={isClearingTeams}
+                isSwappingTeamPlayers={isSwappingTeamPlayers}
                 isSubmittingRatings={isSubmittingRatings}
                 isFinalizingRatings={isFinalizingRatings}
                 isRecalculatingRatings={isRecalculatingRatings}
@@ -1938,6 +1972,9 @@ export default function App() {
                 onWaiveGuestFee={(attendanceId) => handleWaiveGuestFee(attendanceId)}
                 onGenerateTeams={(teamCount) => void handleGenerateTeams(teamCount)}
                 onClearGeneratedTeams={() => void handleClearGeneratedTeams()}
+                onSwapTeamPlayers={(sourceAttendanceId, targetAttendanceId) =>
+                  handleSwapTeamPlayers(sourceAttendanceId, targetAttendanceId)
+                }
                 ratingState={matchRatingState}
                 overallHistory={overallHistory}
                 onFinalizeRatings={() => handleFinalizeRatings()}

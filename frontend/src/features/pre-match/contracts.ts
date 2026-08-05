@@ -59,6 +59,7 @@ export interface PreMatchPageProps {
   isLoading: boolean;
   isGeneratingTeams: boolean;
   isClearingTeams: boolean;
+  isSwappingTeamPlayers: boolean;
   isSubmittingRatings: boolean;
   isFinalizingRatings: boolean;
   isRecalculatingRatings: boolean;
@@ -78,6 +79,7 @@ export interface PreMatchPageProps {
   onWaiveGuestFee: (attendanceId: string) => Promise<void> | void;
   onGenerateTeams: (teamCount: number) => Promise<void> | void;
   onClearGeneratedTeams: () => Promise<void> | void;
+  onSwapTeamPlayers: (sourceAttendanceId: string, targetAttendanceId: string) => Promise<void> | void;
   ratingState?: MatchPlayerRatingState | null;
   overallHistory?: OverallHistorySnapshot | null;
   onFinalizeRatings?: () => Promise<void> | void;

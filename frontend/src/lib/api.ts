@@ -1106,6 +1106,21 @@ export async function clearGeneratedTeams(token: string, matchId: string) {
   return mapMatch(data);
 }
 
+export async function swapTeamPlayers(token: string, matchId: string, sourceAttendanceId: string, targetAttendanceId: string) {
+  const data = await request<RawAttendance[]>(
+    `/matches/${matchId}/swap-team-players/`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        source_attendance_id: sourceAttendanceId,
+        target_attendance_id: targetAttendanceId,
+      }),
+    },
+    token,
+  );
+  return data.map(mapAttendance);
+}
+
 export async function downloadMatchStatsSheet(token: string, matchId: string) {
   return requestBlob(`/matches/${matchId}/stats-sheet/`, undefined, token);
 }

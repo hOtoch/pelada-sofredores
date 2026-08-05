@@ -79,6 +79,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 const ratingWindowDurationMs = 24 * 60 * 60 * 1000;
 const ratingLogPageSize = 8;
 const excludedMatchHistoryDates = new Set(["2026-06-30"]);
+const fairSwapOverallGap = 3;
 
 const getRatingLogRaterFilterValue = (entry: MatchPlayerRatingLogEntry) =>
   entry.raterUserId ?? `legacy:${entry.raterDisplayName}`;
@@ -585,6 +586,7 @@ export function PreMatchPage({
   averageOverallGap,
   isGeneratingTeams,
   isClearingTeams,
+  isSwappingTeamPlayers,
   isSubmittingRatings,
   isFinalizingRatings,
   isRecalculatingRatings,
@@ -605,6 +607,7 @@ export function PreMatchPage({
   onWaiveGuestFee,
   onGenerateTeams,
   onClearGeneratedTeams,
+  onSwapTeamPlayers,
   ratingState,
   overallHistory,
   onFinalizeRatings,
@@ -623,12 +626,14 @@ export function PreMatchPage({
   const [ratingLogRatedFilter, setRatingLogRatedFilter] = useState("");
   const [ratingLogDateFilter, setRatingLogDateFilter] = useState("");
   const [ratingLogPage, setRatingLogPage] = useState(1);
+  const [selectedTeamPlayerId, setSelectedTeamPlayerId] = useState<string | null>(null);
 
   const confirmedCount = attendance.filter((entry) => entry.attendanceStatus === "CONFIRMED").length;
   const isEditableMatch = Boolean(match && (match.status === "OPEN" || match.status === "DRAFT"));
   const canEditAttendance = canManageAttendance && isEditableMatch;
   const canRunGeneration = canManageMatch && isEditableMatch && confirmedCount >= 2;
   const canClearGeneratedTeams = canRunGeneration && generatedTeams.length > 0;
+  const canSwapTeamPlayers = canManageMatch && isEditableMatch && generatedTeams.length > 0;
   const overallSummary = ratingState?.overallSummary ?? [];
   const canFinalizeRatings = Boolean(
     canManageMatch &&
@@ -720,6 +725,22 @@ export function PreMatchPage({
       }),
     [ratingLogDateFilter, ratingLogEntries, ratingLogRatedFilter, ratingLogRaterFilter],
   );
+  const generatedTeamPlayers = useMemo(
+    () =>
+      generatedTeams.flatMap((team, teamIndex) =>
+        team.players.map((player) => ({
+          player,
+          teamIndex,
+          teamName: team.name,
+        })),
+      ),
+    [generatedTeams],
+  );
+  const selectedTeamPlayer = selectedTeamPlayerId
+    ? generatedTeamPlayers.find((entry) => entry.player.id === selectedTeamPlayerId) ?? null
+    : null;
+  const selectedTeamPlayerName = selectedTeamPlayer?.player.displayName ?? "";
+  const selectedTeamPlayerOverall = selectedTeamPlayer?.player.ratings.overall ?? null;
   const ratingLogPageCount = Math.max(1, Math.ceil(filteredRatingLog.length / ratingLogPageSize));
   const currentRatingLogPage = Math.min(ratingLogPage, ratingLogPageCount);
   const paginatedRatingLog = filteredRatingLog.slice(
@@ -764,6 +785,69 @@ export function PreMatchPage({
       setRatingLogPage(ratingLogPageCount);
     }
   }, [ratingLogPage, ratingLogPageCount]);
+
+  useEffect(() => {
+    if (
+      selectedTeamPlayerId &&
+      !generatedTeamPlayers.some((entry) => entry.player.id === selectedTeamPlayerId)
+    ) {
+      setSelectedTeamPlayerId(null);
+    }
+  }, [generatedTeamPlayers, selectedTeamPlayerId]);
+
+  const getTeamPlayerButtonClass = (playerId: string, teamIndex: number, overall: number) => {
+    const classes = ["team-player-button"];
+    if (!selectedTeamPlayer) {
+      return classes.join(" ");
+    }
+
+    const isSelected = selectedTeamPlayer.player.id === playerId;
+    const isSameTeam = selectedTeamPlayer.teamIndex === teamIndex;
+    const overallGap = Math.abs(selectedTeamPlayer.player.ratings.overall - overall);
+
+    if (isSelected) {
+      classes.push("selected");
+    } else if (!isSameTeam && overallGap <= fairSwapOverallGap) {
+      classes.push(overallGap === 0 ? "equal-swap" : "fair-swap");
+    } else {
+      classes.push("dimmed");
+    }
+
+    return classes.join(" ");
+  };
+
+  const handleTeamPlayerClick = async (playerId: string) => {
+    if (isSwappingTeamPlayers) {
+      return;
+    }
+
+    const clickedPlayer = generatedTeamPlayers.find((entry) => entry.player.id === playerId);
+    if (!clickedPlayer) {
+      return;
+    }
+
+    if (!selectedTeamPlayer) {
+      setSelectedTeamPlayerId(playerId);
+      return;
+    }
+
+    if (selectedTeamPlayer.player.id === playerId) {
+      setSelectedTeamPlayerId(null);
+      return;
+    }
+
+    if (selectedTeamPlayer.teamIndex === clickedPlayer.teamIndex || !canSwapTeamPlayers) {
+      setSelectedTeamPlayerId(playerId);
+      return;
+    }
+
+    try {
+      await onSwapTeamPlayers(selectedTeamPlayer.player.id, clickedPlayer.player.id);
+      setSelectedTeamPlayerId(null);
+    } catch {
+      // Parent banner already surfaces the failure.
+    }
+  };
 
   const handleGuestField =
     (field: keyof GuestFormValues) =>
@@ -1582,7 +1666,12 @@ export function PreMatchPage({
           <div className="ledger-heading">
             <div>
               <h3>Times sugeridos</h3>
-              <span className="muted">Gap médio {averageOverallGap ?? 0}</span>
+              <span className="muted">
+                Gap médio {averageOverallGap?.toFixed(2) ?? "0.00"}
+                {selectedTeamPlayerOverall != null
+                  ? ` · ${selectedTeamPlayerName} ${selectedTeamPlayerOverall} OVR`
+                  : ""}
+              </span>
             </div>
             <div className="team-board-actions">
               <button
@@ -1597,7 +1686,12 @@ export function PreMatchPage({
                 <button
                   type="button"
                   className="ghost-button"
-                  disabled={!canClearGeneratedTeams || isGeneratingTeams || isClearingTeams}
+                  disabled={
+                    !canClearGeneratedTeams ||
+                    isGeneratingTeams ||
+                    isClearingTeams ||
+                    isSwappingTeamPlayers
+                  }
                   onClick={() => void onClearGeneratedTeams()}
                 >
                   {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
@@ -1609,7 +1703,7 @@ export function PreMatchPage({
             {generatedTeams.length === 0 ? (
               <p className="empty-state">Gere os times para ver uma sugestão balanceada.</p>
             ) : (
-              generatedTeams.map((team) => (
+              generatedTeams.map((team, teamIndex) => (
                 <article key={team.name} className="team-card">
                   <header>
                     <h4>{team.name}</h4>
@@ -1618,7 +1712,21 @@ export function PreMatchPage({
                   <ul>
                     {team.players.map((player) => (
                       <li key={player.id}>
-                        {player.displayName} · {player.ratings.overall} OVR
+                        <button
+                          type="button"
+                          className={getTeamPlayerButtonClass(
+                            player.id,
+                            teamIndex,
+                            player.ratings.overall,
+                          )}
+                          disabled={isSwappingTeamPlayers}
+                          onClick={() => void handleTeamPlayerClick(player.id)}
+                          aria-pressed={selectedTeamPlayer?.player.id === player.id}
+                          aria-label={`${player.displayName}, ${player.ratings.overall} overall`}
+                        >
+                          <span>{player.displayName}</span>
+                          <strong>{player.ratings.overall} OVR</strong>
+                        </button>
                       </li>
                     ))}
                   </ul>

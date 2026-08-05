@@ -398,6 +398,50 @@ class ApiFlowTests(APITestCase):
             MatchAttendance.objects.filter(match=self.match).exclude(assigned_team_name="").exists()
         )
 
+    def test_admin_can_swap_generated_team_players(self) -> None:
+        self.client.post(
+            f"/api/matches/{self.match.id}/generate-teams/",
+            {"team_count": 2},
+            format="json",
+        )
+        attendances = list(
+            MatchAttendance.objects.filter(match=self.match)
+            .order_by("assigned_team_number", "display_name")
+        )
+        source_attendance = attendances[0]
+        target_attendance = next(
+            attendance
+            for attendance in attendances
+            if attendance.assigned_team_number != source_attendance.assigned_team_number
+        )
+        source_team_number = source_attendance.assigned_team_number
+        source_team_name = source_attendance.assigned_team_name
+        target_team_number = target_attendance.assigned_team_number
+        target_team_name = target_attendance.assigned_team_name
+
+        response = self.client.post(
+            f"/api/matches/{self.match.id}/swap-team-players/",
+            {
+                "source_attendance_id": str(source_attendance.id),
+                "target_attendance_id": str(target_attendance.id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        source_attendance.refresh_from_db()
+        target_attendance.refresh_from_db()
+        self.assertEqual(source_attendance.assigned_team_number, target_team_number)
+        self.assertEqual(source_attendance.assigned_team_name, target_team_name)
+        self.assertEqual(target_attendance.assigned_team_number, source_team_number)
+        self.assertEqual(target_attendance.assigned_team_name, source_team_name)
+        response_assignments = {
+            item["id"]: item["assigned_team_number"]
+            for item in response.data
+        }
+        self.assertEqual(response_assignments[str(source_attendance.id)], target_team_number)
+        self.assertEqual(response_assignments[str(target_attendance.id)], source_team_number)
+
     def test_admin_can_export_import_match_stats_and_update_sports_ranking(self) -> None:
         self.client.post(
             f"/api/matches/{self.match.id}/generate-teams/",

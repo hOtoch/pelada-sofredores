@@ -379,6 +379,17 @@ class TeamGenerationInputSerializer(serializers.Serializer):
     team_count = serializers.IntegerField(min_value=2, max_value=6, required=False)
 
 
+class TeamPlayerSwapSerializer(serializers.Serializer):
+    source_attendance_id = serializers.UUIDField()
+    target_attendance_id = serializers.UUIDField()
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs["source_attendance_id"] == attrs["target_attendance_id"]:
+            raise serializers.ValidationError("Selecione dois jogadores diferentes para trocar.")
+        return attrs
+
+
 class TeamPlayerSerializer(serializers.Serializer):
     id = serializers.CharField()
     display_name = serializers.CharField()
