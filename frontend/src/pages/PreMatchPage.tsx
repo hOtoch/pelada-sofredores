@@ -96,7 +96,7 @@ const getRatingLogRaterFilterValue = (entry: MatchPlayerRatingLogEntry) =>
 
 const formatRatingScore = (score: number) => score.toFixed(1);
 
-const quickRatingScores = [6, 7, 8, 9, 10] as const;
+const quickRatingScores = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
 const getOverallTierClass = (overall: number) => {
   if (overall >= 90) {
