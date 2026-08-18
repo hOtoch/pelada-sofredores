@@ -1273,13 +1273,13 @@ class ApiFlowTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         target_player.refresh_from_db()
-        self.assertEqual(target_player.overall, 76)
+        self.assertEqual(target_player.overall, 77)
         summary_entry = next(
             item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
         )
         self.assertEqual(summary_entry["previous_overall"], 70)
-        self.assertEqual(summary_entry["current_overall"], 76)
-        self.assertEqual(summary_entry["delta"], 6)
+        self.assertEqual(summary_entry["current_overall"], 77)
+        self.assertEqual(summary_entry["delta"], 7)
         self.assertEqual(summary_entry["average_score"], "8.33")
 
     def test_rating_finalization_uses_all_votes_and_rounds_final_score_up(self) -> None:

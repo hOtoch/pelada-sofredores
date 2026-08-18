@@ -160,7 +160,6 @@ def clamp_overall(value: int) -> int:
 
 RATING_WINDOW_DURATION = timedelta(hours=24)
 RATING_OVERALL_WEIGHT = Decimal("0.25")
-RATING_MAX_OVERALL_DELTA = Decimal("6")
 OVERALL_HISTORY_START_DATE = date(2026, 5, 26)
 OVERALL_HISTORY_EXCLUDED_DATES = [date(2026, 6, 30)]
 
@@ -179,10 +178,6 @@ def get_rating_performance_adjustment(rating_average: Decimal) -> Decimal:
         return Decimal("-1")
 
     return Decimal("0")
-
-
-def clamp_overall_delta(value: Decimal) -> Decimal:
-    return max(-RATING_MAX_OVERALL_DELTA, min(RATING_MAX_OVERALL_DELTA, value))
 
 
 def get_rating_average(scores: list[Decimal]) -> Decimal | None:
@@ -236,7 +231,7 @@ def recalculate_player_overall_from_match_ratings(
     community_overall = final_rating_score * Decimal("10")
     base_delta = (community_overall - Decimal(current_overall)) * RATING_OVERALL_WEIGHT
     performance_adjustment = get_rating_performance_adjustment(final_rating_score)
-    overall_delta = clamp_overall_delta(base_delta + performance_adjustment).quantize(
+    overall_delta = (base_delta + performance_adjustment).quantize(
         Decimal("1"), rounding=ROUND_HALF_UP
     )
     next_overall = Decimal(current_overall) + overall_delta
