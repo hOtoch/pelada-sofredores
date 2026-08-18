@@ -20,7 +20,10 @@ export type TransactionCategory =
   | "ADJUSTMENT"
   | "OTHER";
 export type TransactionStatus = "POSTED" | "PENDING" | "VOIDED";
-export type MatchStatus = "DRAFT" | "OPEN" | "CLOSED" | "ARCHIVED";
+export type MatchStatus = "OPEN" | "ARCHIVED";
+
+/** Who each player is allowed to rate once the match is finalized. */
+export type MatchRatingMode = "TEAM" | "GENERAL";
 export type AttendanceStatus = "CONFIRMED" | "PENDING" | "DECLINED";
 export type GuestFeeStatus = "PENDING" | "PAID" | "WAIVED";
 
@@ -98,13 +101,14 @@ export interface MatchSummary {
   location?: string;
   status: MatchStatus;
   expectedTeamCount: number;
+  ratingMode: MatchRatingMode;
   attendanceLockedAt?: ISODateTimeString | null;
   archivedAt?: ISODateTimeString | null;
   teamsGeneratedAt?: ISODateTimeString | null;
   resultSummary?: string | null;
   resultRecordedAt?: ISODateTimeString | null;
   ratingsFinalizedAt?: ISODateTimeString | null;
-  notes?: string;
+  winningTeamNumber?: number | null;
   updatedAt?: ISODateTimeString;
 }
 

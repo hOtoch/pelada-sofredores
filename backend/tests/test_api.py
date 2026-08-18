@@ -536,18 +536,18 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(common_export_response.status_code, 403)
 
     def test_overall_history_lists_member_snapshots_for_all_authenticated_users(self) -> None:
-        self.match.status = Match.Status.CLOSED
+        self.match.status = Match.Status.ARCHIVED
         self.match.scheduled_at = timezone.make_aware(datetime(2026, 5, 26, 20, 0))
         self.match.save(update_fields=["status", "scheduled_at"])
         old_match = Match.objects.create(
             scheduled_at=timezone.make_aware(datetime(2026, 5, 25, 20, 0)),
-            status=Match.Status.CLOSED,
+            status=Match.Status.ARCHIVED,
             expected_team_count=2,
             created_by=self.user,
         )
         excluded_match = Match.objects.create(
             scheduled_at=timezone.make_aware(datetime(2026, 6, 30, 20, 0)),
-            status=Match.Status.CLOSED,
+            status=Match.Status.ARCHIVED,
             expected_team_count=2,
             created_by=self.user,
         )
@@ -597,7 +597,7 @@ class ApiFlowTests(APITestCase):
             {
                 "scheduled_at": (timezone.now() + timedelta(days=9)).isoformat(),
                 "location": "Arena Roxa",
-                "status": Match.Status.DRAFT,
+                "status": Match.Status.OPEN,
                 "expected_team_count": 3,
                 "notes": "Rodada extra do feriado",
             },
@@ -611,14 +611,101 @@ class ApiFlowTests(APITestCase):
     def test_admin_can_patch_match_status(self) -> None:
         response = self.client.patch(
             f"/api/matches/{self.match.id}/",
-            {"status": Match.Status.CLOSED},
+            {"status": Match.Status.ARCHIVED},
             format="json",
         )
 
         self.assertEqual(response.status_code, 200)
         self.match.refresh_from_db()
-        self.assertEqual(self.match.status, Match.Status.CLOSED)
+        self.assertEqual(self.match.status, Match.Status.ARCHIVED)
         self.assertIsNotNone(self.match.attendance_locked_at)
+
+    def test_admin_can_finalize_match_with_winning_team_and_update_wins_ranking(self) -> None:
+        self.client.post(
+            f"/api/matches/{self.match.id}/generate-teams/",
+            {"team_count": 2},
+            format="json",
+        )
+        attendances = list(MatchAttendance.objects.filter(match=self.match))
+        winning_team_number = attendances[0].assigned_team_number
+        winners = [
+            attendance
+            for attendance in attendances
+            if attendance.assigned_team_number == winning_team_number
+        ]
+
+        response = self.client.post(
+            f"/api/matches/{self.match.id}/finalize/",
+            {"winning_team_number": winning_team_number},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.ARCHIVED)
+        self.assertEqual(self.match.winning_team_number, winning_team_number)
+        self.assertIsNotNone(self.match.attendance_locked_at)
+        self.assertIsNotNone(self.match.archived_at)
+        self.assertEqual(
+            MatchPlayerStat.objects.filter(match=self.match, team_won=True).count(),
+            len(winners),
+        )
+        self.assertFalse(
+            MatchPlayerStat.objects.filter(match=self.match, team_won=True)
+            .exclude(team_number=winning_team_number)
+            .exists()
+        )
+
+        ranking_response = self.client.get("/api/analytics/sports-ranking/?limit=10")
+        self.assertEqual(ranking_response.status_code, 200)
+        winner_ids = {str(attendance.player_id) for attendance in winners}
+        ranked_winner_ids = {entry["player_id"] for entry in ranking_response.data["top_winners"]}
+        self.assertEqual(ranked_winner_ids, winner_ids)
+        self.assertTrue(all(entry["wins"] == 1 for entry in ranking_response.data["top_winners"]))
+
+    def test_finalize_match_without_winner_keeps_wins_untouched(self) -> None:
+        response = self.client.post(
+            f"/api/matches/{self.match.id}/finalize/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.ARCHIVED)
+        self.assertIsNone(self.match.winning_team_number)
+        self.assertFalse(MatchPlayerStat.objects.filter(match=self.match).exists())
+
+    def test_finalize_match_rejects_team_outside_the_match(self) -> None:
+        self.client.post(
+            f"/api/matches/{self.match.id}/generate-teams/",
+            {"team_count": 2},
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/matches/{self.match.id}/finalize/",
+            {"winning_team_number": 9},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.OPEN)
+        self.assertIsNone(self.match.winning_team_number)
+
+    def test_common_user_cannot_finalize_match(self) -> None:
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        response = self.client.post(
+            f"/api/matches/{self.match.id}/finalize/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.status, Match.Status.OPEN)
 
     def test_admin_can_record_match_result(self) -> None:
         response = self.client.patch(
@@ -798,18 +885,12 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["id"] for item in response.data], [str(own_transaction.id)])
 
-    def test_common_user_reads_active_roster_and_non_draft_matches(self) -> None:
+    def test_common_user_reads_active_roster_and_matches(self) -> None:
         self.players[1].is_active = False
         self.players[1].save(update_fields=["is_active"])
-        closed_match = Match.objects.create(
+        archived_match = Match.objects.create(
             scheduled_at=timezone.now() + timedelta(days=4),
-            status=Match.Status.CLOSED,
-            expected_team_count=2,
-            created_by=self.user,
-        )
-        Match.objects.create(
-            scheduled_at=timezone.now() + timedelta(days=6),
-            status=Match.Status.DRAFT,
+            status=Match.Status.ARCHIVED,
             expected_team_count=2,
             created_by=self.user,
         )
@@ -823,8 +904,13 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(matches_response.status_code, 200)
         self.assertEqual(summary_response.status_code, 403)
         self.assertNotIn(str(self.players[1].id), [item["id"] for item in players_response.data])
-        self.assertIn(str(closed_match.id), [item["id"] for item in matches_response.data])
-        self.assertTrue(all(item["status"] != Match.Status.DRAFT for item in matches_response.data))
+        self.assertIn(str(archived_match.id), [item["id"] for item in matches_response.data])
+        self.assertTrue(
+            all(
+                item["status"] in {Match.Status.OPEN, Match.Status.ARCHIVED}
+                for item in matches_response.data
+            )
+        )
 
     def test_common_user_without_linked_player_cannot_rate_archived_match(self) -> None:
         self.match.status = Match.Status.ARCHIVED
@@ -919,6 +1005,113 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(MatchPlayerRating.objects.filter(match=other_match, rater_user=self.common_user).count(), 1)
         self.assertEqual(opponent_response.status_code, 400)
         self.assertEqual(self_response.status_code, 400)
+
+    def test_general_rating_mode_lets_player_rate_everyone_except_themselves(self) -> None:
+        self.common_user.linked_player = self.players[0]
+        self.common_user.save(update_fields=["linked_player"])
+        general_match = Match.objects.create(
+            scheduled_at=timezone.now() - timedelta(days=1),
+            status=Match.Status.ARCHIVED,
+            archived_at=timezone.now(),
+            expected_team_count=2,
+            rating_mode=Match.RatingMode.GENERAL,
+            created_by=self.user,
+        )
+        self_attendance = MatchAttendance.objects.create(
+            match=general_match,
+            player=self.players[0],
+            display_name=self.players[0].full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            assigned_team_number=1,
+            assigned_team_name="Time 1",
+            overall=self.players[0].overall,
+        )
+        teammate_attendance = MatchAttendance.objects.create(
+            match=general_match,
+            player=self.players[1],
+            display_name=self.players[1].full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            assigned_team_number=1,
+            assigned_team_name="Time 1",
+            overall=self.players[1].overall,
+        )
+        opponent_attendance = MatchAttendance.objects.create(
+            match=general_match,
+            player=self.players[2],
+            display_name=self.players[2].full_name,
+            is_guest=False,
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+            assigned_team_number=2,
+            assigned_team_name="Time 2",
+            overall=self.players[2].overall,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        state_response = self.client.get(f"/api/matches/{general_match.id}/player-ratings/")
+        opponent_response = self.client.post(
+            f"/api/matches/{general_match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(opponent_attendance.id), "score": 9}]},
+            format="json",
+        )
+        self_response = self.client.post(
+            f"/api/matches/{general_match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(self_attendance.id), "score": 10}]},
+            format="json",
+        )
+
+        self.assertEqual(state_response.status_code, 200)
+        self.assertTrue(state_response.data["can_rate"])
+        rateable_ids = {item["attendance_id"] for item in state_response.data["items"]}
+        self.assertEqual(
+            rateable_ids,
+            {str(teammate_attendance.id), str(opponent_attendance.id)},
+        )
+        self.assertNotIn(str(self_attendance.id), rateable_ids)
+        self.assertEqual(opponent_response.status_code, 200)
+        self.assertEqual(self_response.status_code, 400)
+
+    def test_general_rating_mode_does_not_require_a_generated_team(self) -> None:
+        self.common_user.linked_player = self.players[0]
+        self.common_user.save(update_fields=["linked_player"])
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.rating_mode = Match.RatingMode.GENERAL
+        self.match.save(update_fields=["status", "archived_at", "rating_mode"])
+        MatchAttendance.objects.filter(match=self.match).update(assigned_team_number=None)
+        target_attendance = MatchAttendance.objects.get(match=self.match, player=self.players[1])
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        state_response = self.client.get(f"/api/matches/{self.match.id}/player-ratings/")
+        submit_response = self.client.post(
+            f"/api/matches/{self.match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(target_attendance.id), "score": 8}]},
+            format="json",
+        )
+
+        self.assertEqual(state_response.status_code, 200)
+        self.assertTrue(state_response.data["can_rate"])
+        self.assertEqual(state_response.data["locked_reason"], "")
+        self.assertEqual(submit_response.status_code, 200)
+        self.assertEqual(
+            MatchPlayerRating.objects.filter(match=self.match, rater_user=self.common_user).count(),
+            1,
+        )
+
+    def test_matches_default_to_team_rating_mode(self) -> None:
+        response = self.client.post(
+            "/api/matches/",
+            {
+                "scheduled_at": (timezone.now() + timedelta(days=3)).isoformat(),
+                "location": "Arena Padrao",
+                "expected_team_count": 2,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["rating_mode"], Match.RatingMode.TEAM)
 
     def test_common_user_with_linked_player_without_generated_team_cannot_rate(self) -> None:
         self.common_user.linked_player = self.players[0]

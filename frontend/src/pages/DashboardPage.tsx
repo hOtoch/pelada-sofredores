@@ -609,7 +609,6 @@ export function DashboardPage({
       "Indicadores da temporada",
       buildCsvLine(["Peladas registradas", seasonOverview?.totalMatches ?? ""]),
       buildCsvLine(["Peladas abertas", seasonOverview?.matchesOpen ?? ""]),
-      buildCsvLine(["Peladas fechadas", seasonOverview?.matchesClosed ?? ""]),
       buildCsvLine(["Mensalistas ativos", seasonOverview?.activeMembers ?? ""]),
       buildCsvLine(["Adimplencia media", `${adimplenceRate.toFixed(0)}%`]),
       buildCsvLine(["Presenca media", presenceRankingData.length ? `${averageAttendanceRate.toFixed(0)}%` : ""]),

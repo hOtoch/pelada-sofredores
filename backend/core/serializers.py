@@ -263,18 +263,21 @@ class MatchSerializer(serializers.ModelSerializer):
             "location",
             "status",
             "expected_team_count",
+            "rating_mode",
             "attendance_locked_at",
             "archived_at",
             "teams_generated_at",
             "result_summary",
             "result_recorded_at",
             "ratings_finalized_at",
+            "winning_team_number",
             "notes",
             "created_by",
             "created_by_name",
             "created_at",
             "updated_at",
         )
+        read_only_fields = ("winning_team_number",)
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -315,7 +318,7 @@ class MatchAttendanceSerializer(serializers.ModelSerializer):
             obj.is_guest
             and obj.attendance_status == MatchAttendance.AttendanceStatus.CONFIRMED
             and obj.guest_fee_status == MatchAttendance.GuestFeeStatus.PENDING
-            and obj.match.status in [Match.Status.CLOSED, Match.Status.ARCHIVED]
+            and obj.match.status == Match.Status.ARCHIVED
         )
 
     def get_guest_fee_outstanding(self, obj):
@@ -377,6 +380,14 @@ class FinancialSummarySerializer(serializers.Serializer):
 
 class TeamGenerationInputSerializer(serializers.Serializer):
     team_count = serializers.IntegerField(min_value=2, max_value=6, required=False)
+
+
+class MatchFinalizeSerializer(serializers.Serializer):
+    winning_team_number = serializers.IntegerField(
+        min_value=1,
+        required=False,
+        allow_null=True,
+    )
 
 
 class TeamPlayerSwapSerializer(serializers.Serializer):
@@ -515,7 +526,6 @@ class SeasonOverviewSerializer(serializers.Serializer):
     reference_month = serializers.CharField()
     total_matches = serializers.IntegerField()
     matches_open = serializers.IntegerField()
-    matches_closed = serializers.IntegerField()
     matches_archived = serializers.IntegerField()
     active_members = serializers.IntegerField()
     attendance_confirmed = serializers.IntegerField()

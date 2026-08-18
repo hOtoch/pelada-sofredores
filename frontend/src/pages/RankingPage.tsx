@@ -54,10 +54,8 @@ const formatDateTime = (value: string) =>
   });
 
 const matchStatusLabels: Record<MatchSummary["status"], string> = {
-  DRAFT: "Rascunho",
   OPEN: "Aberta",
-  CLOSED: "Fechada",
-  ARCHIVED: "Arquivada",
+  ARCHIVED: "Finalizada",
 };
 
 export function RankingPage({

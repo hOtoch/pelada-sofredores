@@ -55,10 +55,8 @@ const attendanceStatusLabel: Record<AttendanceStatus, string> = {
 };
 
 const matchStatusLabel: Record<MatchStatus, string> = {
-  DRAFT: "Rascunho",
   OPEN: "Aberta",
-  CLOSED: "Fechada",
-  ARCHIVED: "Arquivada",
+  ARCHIVED: "Finalizada",
 };
 
 function formatDateTime(value: string) {

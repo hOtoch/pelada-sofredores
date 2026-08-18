@@ -101,16 +101,23 @@ class Player(TimestampedModel, RatingSnapshotMixin):
 
 class Match(TimestampedModel):
     class Status(models.TextChoices):
-        DRAFT = "DRAFT", "Rascunho"
         OPEN = "OPEN", "Aberta"
-        CLOSED = "CLOSED", "Fechada"
-        ARCHIVED = "ARCHIVED", "Arquivada"
+        ARCHIVED = "ARCHIVED", "Finalizada"
+
+    class RatingMode(models.TextChoices):
+        TEAM = "TEAM", "Entre os proprios times"
+        GENERAL = "GENERAL", "Geral"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     scheduled_at = models.DateTimeField()
     location = models.CharField(max_length=120, blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
     expected_team_count = models.PositiveSmallIntegerField(default=2)
+    rating_mode = models.CharField(
+        max_length=16,
+        choices=RatingMode.choices,
+        default=RatingMode.TEAM,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="created_matches",
@@ -124,6 +131,7 @@ class Match(TimestampedModel):
     result_summary = models.TextField(blank=True)
     result_recorded_at = models.DateTimeField(null=True, blank=True)
     ratings_finalized_at = models.DateTimeField(null=True, blank=True)
+    winning_team_number = models.PositiveSmallIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
     class Meta:

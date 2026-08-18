@@ -57,7 +57,7 @@ import {
   deleteAttendance as deleteAttendanceRequest,
   downloadMatchStatsSheet,
   patchMatchStatus as patchMatchStatusRequest,
-  patchMatchResult as patchMatchResultRequest,
+  finalizeMatch as finalizeMatchRequest,
   finalizeMatchRatings,
   generateTeams,
   getCurrentMatch,
@@ -158,10 +158,8 @@ const emptySportsRanking: SportsRankingSnapshot = {
 const currentReferenceMonth = () => new Date().toISOString().slice(0, 7);
 
 const matchStatusLabels: Record<MatchSummary["status"], string> = {
-  DRAFT: "Pelada em rascunho",
   OPEN: "Pelada aberta",
-  CLOSED: "Pelada fechada",
-  ARCHIVED: "Pelada arquivada",
+  ARCHIVED: "Pelada finalizada",
 };
 
 const roleLabels = {
@@ -617,10 +615,7 @@ export default function App() {
         setPlayers(squad);
         setOverallHistory(overallHistoryData);
         setSportsRanking(sportsRankingData);
-        const visibleMatches =
-          currentUser.role === "COMMON"
-            ? matchData.matches.filter((entry) => entry.status !== "DRAFT")
-            : matchData.matches;
+        const visibleMatches = matchData.matches;
         const visibleCurrentMatch =
           currentUser.role === "COMMON"
             ? visibleMatches.find((entry) => entry.id === matchData.selectedMatch?.id) ?? visibleMatches[0] ?? null
@@ -1096,7 +1091,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateMatchResult = async (matchId: string, resultSummary: string) => {
+  const handleFinalizeMatch = async (matchId: string, winningTeamNumber: number | null) => {
     if (!token) {
       return;
     }
@@ -1105,13 +1100,31 @@ export default function App() {
     setScreenError(undefined);
 
     try {
-      await patchMatchResultRequest(token, matchId, resultSummary);
-      const matchData = await fetchMatchData(token, matchId);
+      await finalizeMatchRequest(token, matchId, winningTeamNumber);
+      const [matchData, financialData, overallHistoryData, nextSportsRanking] = await Promise.all([
+        fetchMatchData(token, matchId),
+        isAdmin ? fetchFinancialData(token) : Promise.resolve(null),
+        getOverallHistory(token),
+        getSportsRanking(token, 20),
+        refreshAdminDataState(token),
+      ]);
       setMatches(matchData.matches);
       setCurrentMatch(matchData.selectedMatch);
-      reportSuccess("Resultado da pelada registrado.");
+      setOverallHistory(overallHistoryData);
+      setSportsRanking(nextSportsRanking);
+      if (financialData) {
+        const [cashFlow, ledger, nextGuestFeeDebts] = financialData;
+        setSummary(cashFlow);
+        setTransactions(ledger);
+        setGuestFeeDebts(nextGuestFeeDebts);
+      }
+      reportSuccess(
+        winningTeamNumber == null
+          ? "Pelada finalizada."
+          : "Pelada finalizada e vitorias registradas para o time vencedor.",
+      );
     } catch (error) {
-      reportError("Falha ao registrar o resultado da pelada.", error);
+      reportError("Falha ao finalizar a pelada.", error);
       throw error;
     } finally {
       setIsSubmittingMatch(false);
@@ -1516,7 +1529,7 @@ export default function App() {
         listTransactions(token),
         listPlayers(token),
       ]);
-      const visibleMatches = matchData.matches.filter((entry) => entry.status !== "DRAFT");
+      const visibleMatches = matchData.matches;
       setPortalLinkedPlayer(portalData.linkedPlayer);
       setPortalFinance(portalData.finance);
       setPortalRecentAttendance(portalData.recentAttendance);
@@ -1750,7 +1763,7 @@ export default function App() {
                   finance={portalFinance}
                   transactions={transactions}
                   players={players}
-                  matches={matches.filter((match) => match.status !== "DRAFT")}
+                  matches={matches}
                   recentAttendance={portalRecentAttendance}
                   upcomingMatches={portalUpcomingMatches}
                   recentTeams={portalRecentTeams}
@@ -1896,8 +1909,8 @@ export default function App() {
                 onUpdateMatchStatus={(matchId, nextStatus) =>
                   handleUpdateMatchStatus(matchId, nextStatus)
                 }
-                onUpdateMatchResult={(matchId, resultSummary) =>
-                  handleUpdateMatchResult(matchId, resultSummary)
+                onFinalizeMatch={(matchId, winningTeamNumber) =>
+                  handleFinalizeMatch(matchId, winningTeamNumber)
                 }
                 onConfirmPlayer={(playerId) => handleConfirmPlayer(playerId)}
                 onAddGuest={(values) => handleAddGuest(values)}
@@ -1962,8 +1975,8 @@ export default function App() {
                 onUpdateMatchStatus={(matchId, nextStatus) =>
                   handleUpdateMatchStatus(matchId, nextStatus)
                 }
-                onUpdateMatchResult={(matchId, resultSummary) =>
-                  handleUpdateMatchResult(matchId, resultSummary)
+                onFinalizeMatch={(matchId, winningTeamNumber) =>
+                  handleFinalizeMatch(matchId, winningTeamNumber)
                 }
                 onConfirmPlayer={(playerId) => handleConfirmPlayer(playerId)}
                 onAddGuest={(values) => handleAddGuest(values)}

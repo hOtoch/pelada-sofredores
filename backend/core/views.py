@@ -31,6 +31,7 @@ from .serializers import (
     FinancialSummarySerializer,
     LoginSerializer,
     MatchAttendanceSerializer,
+    MatchFinalizeSerializer,
     MatchPlayerRatingStateSerializer,
     MatchPlayerRatingSubmitSerializer,
     MatchStatsImportSummarySerializer,
@@ -52,7 +53,7 @@ from .serializers import (
 )
 
 GUEST_FEE_AMOUNT = Decimal("14.00")
-FINAL_MATCH_STATUSES = [Match.Status.CLOSED, Match.Status.ARCHIVED]
+FINAL_MATCH_STATUSES = [Match.Status.ARCHIVED]
 UNLINKED_RATING_LOCK_REASON = (
     "Sua conta ainda nao esta vinculada a um jogador. "
     "Procure um administrador para validar sua conta."
@@ -341,6 +342,108 @@ def finalize_due_match_ratings() -> None:
         finalize_match_ratings_if_due(match)
 
 
+MATCH_FINALIZE_SOURCE_LABEL = "Finalizacao da pelada"
+
+
+def get_confirmed_attendance_entries(match: Match) -> list[MatchAttendance]:
+    return list(
+        match.attendance_entries.select_related("player").filter(
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED,
+        )
+    )
+
+
+def get_assigned_team_numbers(attendance_entries) -> list[int]:
+    return sorted(
+        {
+            entry.assigned_team_number
+            for entry in attendance_entries
+            if entry.assigned_team_number is not None
+        }
+    )
+
+
+def sync_match_win_stats(
+    match: Match,
+    attendance_entries,
+    winning_team_number: int,
+    user: User | None,
+) -> None:
+    """Mark the winning squad on the per-player stats that feed the wins ranking."""
+
+    existing_stats = {
+        stat.attendance_id: stat for stat in MatchPlayerStat.objects.filter(match=match)
+    }
+    stats_to_create = []
+    stats_to_update = []
+
+    for entry in attendance_entries:
+        if entry.assigned_team_number is None:
+            continue
+
+        team_won = entry.assigned_team_number == winning_team_number
+        stat = existing_stats.get(entry.id)
+        if stat is None:
+            stats_to_create.append(
+                MatchPlayerStat(
+                    match=match,
+                    attendance=entry,
+                    player=entry.player,
+                    display_name=entry.display_name,
+                    team_number=entry.assigned_team_number,
+                    team_name=entry.assigned_team_name,
+                    goals=0,
+                    assists=0,
+                    team_won=team_won,
+                    imported_by=user if user and user.is_authenticated else None,
+                    source_label=MATCH_FINALIZE_SOURCE_LABEL,
+                )
+            )
+        elif stat.team_won != team_won:
+            stat.team_won = team_won
+            stats_to_update.append(stat)
+
+    if stats_to_create:
+        MatchPlayerStat.objects.bulk_create(stats_to_create)
+    if stats_to_update:
+        MatchPlayerStat.objects.bulk_update(stats_to_update, ["team_won", "updated_at"])
+
+
+def finalize_match(match: Match, winning_team_number: int | None, user: User | None) -> Match:
+    attendance_entries = get_confirmed_attendance_entries(match)
+    team_numbers = get_assigned_team_numbers(attendance_entries)
+
+    if winning_team_number is not None:
+        if len(team_numbers) != 2:
+            raise ValidationError(
+                {
+                    "winning_team_number": (
+                        "So e possivel escolher o time vencedor em peladas com dois times."
+                    )
+                }
+            )
+        if winning_team_number not in team_numbers:
+            raise ValidationError(
+                {"winning_team_number": "Escolha um dos times desta pelada."}
+            )
+
+    now = timezone.now()
+    with transaction.atomic():
+        match.status = Match.Status.ARCHIVED
+        match.attendance_locked_at = match.attendance_locked_at or now
+        match.archived_at = match.archived_at or now
+        update_fields = ["status", "attendance_locked_at", "archived_at", "updated_at"]
+
+        if winning_team_number is not None:
+            match.winning_team_number = winning_team_number
+            update_fields.append("winning_team_number")
+            sync_match_win_stats(match, attendance_entries, winning_team_number, user)
+
+        match.save(update_fields=update_fields)
+
+    return match
+
+
 MATCH_STATS_SHEET_NAME = "Estatisticas"
 MATCH_STATS_HEADERS = ["Jogador", "Perfil", "Gols", "Assistencias"]
 TRUTHY_SHEET_VALUES = {"1", "x", "s", "sim", "true", "verdadeiro", "vitoria", "ganhou", "win", "yes"}
@@ -611,6 +714,9 @@ def import_match_stats_from_xlsx(match: Match, uploaded_file, user: User) -> dic
         raise ValidationError({"file": "Nenhuma linha de jogador foi encontrada na planilha."})
 
     replaced_existing = MatchPlayerStat.objects.filter(match=match).count()
+    # A planilha sem coluna de vitoria preenchida nao pode apagar o vencedor
+    # escolhido ao finalizar a pelada.
+    fallback_winning_team_number = match.winning_team_number if not winning_team_keys else None
     stats_to_create = []
     for attendance_entry in attendance_entries:
         imported_values = parsed_stats_by_attendance_id.get(
@@ -618,6 +724,10 @@ def import_match_stats_from_xlsx(match: Match, uploaded_file, user: User) -> dic
             {"goals": 0, "assists": 0},
         )
         team_key = get_attendance_visible_team_key(attendance_entry)
+        if fallback_winning_team_number is None:
+            team_won = bool(team_key and team_key in winning_team_keys)
+        else:
+            team_won = attendance_entry.assigned_team_number == fallback_winning_team_number
         stats_to_create.append(
             MatchPlayerStat(
                 match=match,
@@ -628,15 +738,24 @@ def import_match_stats_from_xlsx(match: Match, uploaded_file, user: User) -> dic
                 team_name=attendance_entry.assigned_team_name,
                 goals=imported_values["goals"],
                 assists=imported_values["assists"],
-                team_won=bool(team_key and team_key in winning_team_keys),
+                team_won=team_won,
                 imported_by=user,
                 source_label=getattr(uploaded_file, "name", "")[:120],
             )
         )
 
+    winning_team_numbers = {
+        stat.team_number for stat in stats_to_create if stat.team_won and stat.team_number is not None
+    }
+
     with transaction.atomic():
         MatchPlayerStat.objects.filter(match=match).delete()
         MatchPlayerStat.objects.bulk_create(stats_to_create)
+        if len(winning_team_numbers) == 1:
+            single_winner = next(iter(winning_team_numbers))
+            if match.winning_team_number != single_winner:
+                match.winning_team_number = single_winner
+                match.save(update_fields=["winning_team_number", "updated_at"])
 
     return {
         "match_id": match.id,
@@ -756,7 +875,7 @@ class MatchViewSet(viewsets.ModelViewSet):
         if getattr(self.request.user, "role", None) == Role.ADMIN:
             return queryset
         return queryset.filter(
-            status__in=[Match.Status.OPEN, Match.Status.CLOSED, Match.Status.ARCHIVED]
+            status__in=[Match.Status.OPEN, Match.Status.ARCHIVED]
         ).distinct()
 
     def perform_create(self, serializer):
@@ -774,9 +893,7 @@ class MatchViewSet(viewsets.ModelViewSet):
                 archived_at = serializer.instance.archived_at or timezone.now()
 
             extra_fields["attendance_locked_at"] = (
-                timezone.now()
-                if status_value in [Match.Status.CLOSED, Match.Status.ARCHIVED]
-                else None
+                timezone.now() if status_value == Match.Status.ARCHIVED else None
             )
             extra_fields["archived_at"] = archived_at
             if status_value != Match.Status.ARCHIVED:
@@ -791,7 +908,7 @@ class MatchViewSet(viewsets.ModelViewSet):
     def current(self, request):
         match = (
             self.get_queryset()
-            .filter(status__in=[Match.Status.OPEN, Match.Status.DRAFT])
+            .filter(status=Match.Status.OPEN)
             .order_by("scheduled_at")
             .first()
         )
@@ -930,6 +1047,18 @@ class MatchViewSet(viewsets.ModelViewSet):
             "display_name",
         )
         return Response(MatchAttendanceSerializer(refreshed_attendance, many=True).data)
+
+    @action(detail=True, methods=["post"], url_path="finalize")
+    def finalize(self, request, pk=None):
+        input_serializer = MatchFinalizeSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        match = self.get_object()
+        finalize_match(
+            match,
+            input_serializer.validated_data.get("winning_team_number"),
+            request.user,
+        )
+        return Response(self.get_serializer(match).data)
 
     @action(detail=True, methods=["get"], url_path="stats-sheet")
     def export_stats_sheet(self, request, pk=None):
@@ -1089,8 +1218,16 @@ class MatchViewSet(viewsets.ModelViewSet):
             player__isnull=False,
         )
 
-    def _get_teammate_rating_queryset(self, match, linked_player):
+    def _get_rateable_entries_queryset(self, match, linked_player):
+        """Entries the given player may rate, according to the match rating mode.
+
+        In GENERAL mode everyone rates everyone except themselves; in TEAM mode
+        the ballot is restricted to the rater's own team.
+        """
         participants_queryset = self._get_rating_participants_queryset(match)
+        if match.rating_mode == Match.RatingMode.GENERAL:
+            return participants_queryset.exclude(player=linked_player), ""
+
         linked_attendance = participants_queryset.filter(player=linked_player).first()
         if not linked_attendance or linked_attendance.assigned_team_number is None:
             return participants_queryset.none(), MISSING_TEAM_RATING_LOCK_REASON
@@ -1139,12 +1276,12 @@ class MatchViewSet(viewsets.ModelViewSet):
 
         participants_queryset = self._get_rating_participants_queryset(match)
         if linked_player:
-            participants_queryset, teammate_locked_reason = self._get_teammate_rating_queryset(
+            participants_queryset, ballot_locked_reason = self._get_rateable_entries_queryset(
                 match,
                 linked_player,
             )
-            if can_rate and teammate_locked_reason:
-                locked_reason = teammate_locked_reason
+            if can_rate and ballot_locked_reason:
+                locked_reason = ballot_locked_reason
                 can_rate = False
 
         participants = list(participants_queryset.order_by("display_name"))
@@ -1175,7 +1312,11 @@ class MatchViewSet(viewsets.ModelViewSet):
             )
 
         if can_rate and not items:
-            locked_reason = "Nao ha outros mensalistas confirmados para avaliar."
+            locked_reason = (
+                "Nao ha outros participantes confirmados para avaliar."
+                if match.rating_mode == Match.RatingMode.GENERAL
+                else "Nao ha outros mensalistas confirmados para avaliar."
+            )
             can_rate = False
 
         payload = {
@@ -1211,22 +1352,25 @@ class MatchViewSet(viewsets.ModelViewSet):
         serializer = MatchPlayerRatingSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        allowed_entries_queryset, teammate_locked_reason = self._get_teammate_rating_queryset(
+        allowed_entries_queryset, ballot_locked_reason = self._get_rateable_entries_queryset(
             match,
             linked_player,
         )
-        if teammate_locked_reason:
-            raise ValidationError({"detail": teammate_locked_reason})
+        if ballot_locked_reason:
+            raise ValidationError({"detail": ballot_locked_reason})
 
+        invalid_rating_message = (
+            "Avalie apenas outros participantes confirmados desta pelada."
+            if match.rating_mode == Match.RatingMode.GENERAL
+            else "Avalie apenas jogadores do mesmo time do seu jogador vinculado."
+        )
         allowed_entries = {entry.id: entry for entry in allowed_entries_queryset}
         with transaction.atomic():
             for item in serializer.validated_data["ratings"]:
                 attendance_id = item["attendance_id"]
                 attendance_entry = allowed_entries.get(attendance_id)
                 if not attendance_entry:
-                    raise ValidationError(
-                        {"ratings": "Avalie apenas jogadores do mesmo time do seu jogador vinculado."}
-                    )
+                    raise ValidationError({"ratings": invalid_rating_message})
                 MatchPlayerRating.objects.update_or_create(
                     match=match,
                     rater_user=request.user,
@@ -1297,7 +1441,7 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         if getattr(self.request.user, "role", None) != Role.ADMIN:
             queryset = queryset.filter(
-                match__status__in=[Match.Status.OPEN, Match.Status.CLOSED, Match.Status.ARCHIVED]
+                match__status__in=[Match.Status.OPEN, Match.Status.ARCHIVED]
             ).distinct()
         guest_fee_due = self.request.query_params.get("guest_fee_due")
         if guest_fee_due in {"1", "true", "True"}:
@@ -1609,7 +1753,7 @@ class PortalOverviewView(APIView):
             ]
 
         upcoming_matches_qs = (
-            Match.objects.filter(status__in=[Match.Status.OPEN, Match.Status.DRAFT], scheduled_at__gte=timezone.now())
+            Match.objects.filter(status=Match.Status.OPEN, scheduled_at__gte=timezone.now())
             .order_by("scheduled_at")[:5]
         )
         upcoming_matches = list(upcoming_matches_qs)
@@ -1657,7 +1801,6 @@ class SeasonOverviewView(APIView):
         match_counts = Match.objects.aggregate(
             total_matches=Count("id"),
             matches_open=Count("id", filter=Q(status=Match.Status.OPEN)),
-            matches_closed=Count("id", filter=Q(status=Match.Status.CLOSED)),
             matches_archived=Count("id", filter=Q(status=Match.Status.ARCHIVED)),
         )
 

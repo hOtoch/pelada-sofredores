@@ -46,7 +46,6 @@ export interface DashboardSeasonOverviewSnapshot {
   referenceMonth: string;
   totalMatches: number;
   matchesOpen: number;
-  matchesClosed: number;
   matchesArchived: number;
   activeMembers: number;
   attendanceConfirmed: number;

@@ -98,13 +98,14 @@ type RawMatch = {
   location: string;
   status: MatchSummary["status"];
   expected_team_count: number;
+  rating_mode: MatchSummary["ratingMode"];
   attendance_locked_at: string | null;
   archived_at: string | null;
   teams_generated_at: string | null;
   result_summary: string | null;
   result_recorded_at: string | null;
   ratings_finalized_at: string | null;
-  notes: string;
+  winning_team_number: number | null;
   updated_at: string;
 };
 
@@ -269,7 +270,6 @@ type RawSeasonOverview = {
   reference_month: string;
   total_matches: number;
   matches_open: number;
-  matches_closed: number;
   matches_archived: number;
   active_members: number;
   attendance_confirmed: number;
@@ -501,13 +501,14 @@ function mapMatch(raw: RawMatch): MatchSummary {
     location: raw.location,
     status: raw.status,
     expectedTeamCount: raw.expected_team_count,
+    ratingMode: raw.rating_mode,
     attendanceLockedAt: raw.attendance_locked_at,
     archivedAt: raw.archived_at,
     teamsGeneratedAt: raw.teams_generated_at,
     resultSummary: raw.result_summary,
     resultRecordedAt: raw.result_recorded_at,
     ratingsFinalizedAt: raw.ratings_finalized_at,
-    notes: raw.notes,
+    winningTeamNumber: raw.winning_team_number ?? null,
     updatedAt: raw.updated_at,
   };
 }
@@ -551,7 +552,6 @@ function mapSeasonOverview(raw: RawSeasonOverview): DashboardSeasonOverviewSnaps
     referenceMonth: raw.reference_month,
     totalMatches: raw.total_matches,
     matchesOpen: raw.matches_open,
-    matchesClosed: raw.matches_closed,
     matchesArchived: raw.matches_archived,
     activeMembers: raw.active_members,
     attendanceConfirmed: raw.attendance_confirmed,
@@ -1017,7 +1017,7 @@ function toMatchPayload(values: MatchFormValues) {
     location: values.location,
     expected_team_count: values.expectedTeamCount,
     status: values.status,
-    notes: values.notes ?? "",
+    rating_mode: values.ratingMode,
   };
 }
 
@@ -1056,6 +1056,22 @@ export async function patchMatchStatus(token: string, matchId: string, status: M
     {
       method: "PATCH",
       body: JSON.stringify({ status }),
+    },
+    token,
+  );
+  return mapMatch(data);
+}
+
+export async function finalizeMatch(
+  token: string,
+  matchId: string,
+  winningTeamNumber: number | null,
+) {
+  const data = await request<RawMatch>(
+    `/matches/${matchId}/finalize/`,
+    {
+      method: "POST",
+      body: JSON.stringify({ winning_team_number: winningTeamNumber }),
     },
     token,
   );

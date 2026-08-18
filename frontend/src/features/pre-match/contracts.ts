@@ -3,6 +3,7 @@ import type {
   GeneratedTeam,
   MatchPlayerRatingInput,
   MatchPlayerRatingState,
+  MatchRatingMode,
   MatchStatus,
   MatchSummary,
   OverallHistorySnapshot,
@@ -15,7 +16,7 @@ export interface MatchFormValues {
   location: string;
   expectedTeamCount: number;
   status: MatchStatus;
-  notes?: string;
+  ratingMode: MatchRatingMode;
 }
 
 export interface GuestFormValues {
@@ -71,7 +72,7 @@ export interface PreMatchPageProps {
   onCreateMatch: (values: MatchFormValues) => Promise<void> | void;
   onEditMatch: (matchId: string, values: MatchFormValues) => Promise<void> | void;
   onUpdateMatchStatus: (matchId: string, nextStatus: MatchStatus) => Promise<void> | void;
-  onUpdateMatchResult: (matchId: string, resultSummary: string) => Promise<void> | void;
+  onFinalizeMatch: (matchId: string, winningTeamNumber: number | null) => Promise<void> | void;
   onConfirmPlayer: (playerId: string) => Promise<void> | void;
   onAddGuest: (values: GuestFormValues) => Promise<void> | void;
   onRemoveAttendance: (attendanceId: string) => Promise<void> | void;

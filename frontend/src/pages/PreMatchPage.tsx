@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "
 
 import type {
   AttendanceStatus,
+  MatchRatingMode,
   MatchPlayerRatingLogEntry,
   MatchPlayerOverallSummary,
   MatchPlayerRatingInput,
@@ -25,10 +26,18 @@ const defaultGuestForm: GuestFormValues = {
 };
 
 const matchStatusLabels: Record<MatchStatus, string> = {
-  DRAFT: "Rascunho",
   OPEN: "Aberta",
-  CLOSED: "Fechada",
-  ARCHIVED: "Arquivada",
+  ARCHIVED: "Finalizada",
+};
+
+const ratingModeLabels: Record<MatchRatingMode, string> = {
+  TEAM: "Votação entre os próprios times",
+  GENERAL: "Votação geral",
+};
+
+const ratingModeHints: Record<MatchRatingMode, string> = {
+  TEAM: "Cada jogador avalia apenas os companheiros do seu próprio time.",
+  GENERAL: "Todo mundo avalia todo mundo; só o próprio jogador fica de fora da lista dele.",
 };
 
 const attendanceStatusLabels: Record<AttendanceStatus, string> = {
@@ -51,7 +60,7 @@ const createDefaultMatchForm = (): MatchFormValues => {
     location: "",
     expectedTeamCount: 2,
     status: "OPEN",
-    notes: "",
+    ratingMode: "TEAM",
   };
 };
 
@@ -78,6 +87,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 
 const ratingWindowDurationMs = 24 * 60 * 60 * 1000;
 const ratingLogPageSize = 8;
+const matchHistoryPageSize = 5;
 const excludedMatchHistoryDates = new Set(["2026-06-30"]);
 const fairSwapOverallGap = 3;
 
@@ -116,14 +126,6 @@ const overallHistoryPalette = [
   "#38bdf8",
   "#f59e0b",
 ];
-
-const escapeCsvCell = (value: string | number | null | undefined) => {
-  const normalized = String(value ?? "");
-  if (/[",;\n]/.test(normalized)) {
-    return `"${normalized.replace(/"/g, "\"\"")}"`;
-  }
-  return normalized;
-};
 
 const downloadTextFile = (filename: string, content: string, mimeType: string) => {
   const blob = new Blob([content], { type: mimeType });
@@ -599,7 +601,7 @@ export function PreMatchPage({
   onCreateMatch,
   onEditMatch,
   onUpdateMatchStatus,
-  onUpdateMatchResult,
+  onFinalizeMatch,
   onConfirmPlayer,
   onAddGuest,
   onRemoveAttendance,
@@ -617,19 +619,21 @@ export function PreMatchPage({
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [guestValues, setGuestValues] = useState<GuestFormValues>(defaultGuestForm);
   const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
+  const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
+  const [winningTeamNumber, setWinningTeamNumber] = useState<number | null>(null);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [matchValues, setMatchValues] = useState<MatchFormValues>(createDefaultMatchForm);
-  const [resultSummary, setResultSummary] = useState("");
   const [ratingDraft, setRatingDraft] = useState<Record<string, number>>({});
   const [ratingCardIndex, setRatingCardIndex] = useState(0);
   const [ratingLogRaterFilter, setRatingLogRaterFilter] = useState("");
   const [ratingLogRatedFilter, setRatingLogRatedFilter] = useState("");
   const [ratingLogDateFilter, setRatingLogDateFilter] = useState("");
   const [ratingLogPage, setRatingLogPage] = useState(1);
+  const [matchHistoryPage, setMatchHistoryPage] = useState(1);
   const [selectedTeamPlayerId, setSelectedTeamPlayerId] = useState<string | null>(null);
 
   const confirmedCount = attendance.filter((entry) => entry.attendanceStatus === "CONFIRMED").length;
-  const isEditableMatch = Boolean(match && (match.status === "OPEN" || match.status === "DRAFT"));
+  const isEditableMatch = match?.status === "OPEN";
   const canEditAttendance = canManageAttendance && isEditableMatch;
   const canRunGeneration = canManageMatch && isEditableMatch && confirmedCount >= 2;
   const canClearGeneratedTeams = canRunGeneration && generatedTeams.length > 0;
@@ -667,6 +671,32 @@ export function PreMatchPage({
     [responsiblePlayers],
   );
   const canSubmitGuest = Boolean(guestValues.displayName.trim() && guestValues.invitedById);
+
+  const matchTeamOptions = useMemo(() => {
+    const teamsByNumber = new Map<number, string>();
+    attendance.forEach((entry) => {
+      if (entry.attendanceStatus !== "CONFIRMED" || entry.assignedTeamNumber == null) {
+        return;
+      }
+
+      if (!teamsByNumber.has(entry.assignedTeamNumber)) {
+        teamsByNumber.set(
+          entry.assignedTeamNumber,
+          entry.assignedTeamName || `Time ${entry.assignedTeamNumber}`,
+        );
+      }
+    });
+
+    return [...teamsByNumber.entries()]
+      .sort(([leftNumber], [rightNumber]) => leftNumber - rightNumber)
+      .map(([number, name]) => ({ number, name }));
+  }, [attendance]);
+  const canChooseWinningTeam = matchTeamOptions.length === 2;
+  const winningTeamLabel =
+    match?.winningTeamNumber != null
+      ? matchTeamOptions.find((team) => team.number === match.winningTeamNumber)?.name ??
+        `Time ${match.winningTeamNumber}`
+      : null;
 
   const matchHistory = useMemo(
     () =>
@@ -741,16 +771,18 @@ export function PreMatchPage({
     : null;
   const selectedTeamPlayerName = selectedTeamPlayer?.player.displayName ?? "";
   const selectedTeamPlayerOverall = selectedTeamPlayer?.player.ratings.overall ?? null;
+  const matchHistoryPageCount = Math.max(1, Math.ceil(matchHistory.length / matchHistoryPageSize));
+  const currentMatchHistoryPage = Math.min(matchHistoryPage, matchHistoryPageCount);
+  const paginatedMatchHistory = matchHistory.slice(
+    (currentMatchHistoryPage - 1) * matchHistoryPageSize,
+    currentMatchHistoryPage * matchHistoryPageSize,
+  );
   const ratingLogPageCount = Math.max(1, Math.ceil(filteredRatingLog.length / ratingLogPageSize));
   const currentRatingLogPage = Math.min(ratingLogPage, ratingLogPageCount);
   const paginatedRatingLog = filteredRatingLog.slice(
     (currentRatingLogPage - 1) * ratingLogPageSize,
     currentRatingLogPage * ratingLogPageSize,
   );
-
-  useEffect(() => {
-    setResultSummary(match?.resultSummary ?? "");
-  }, [match]);
 
   useEffect(() => {
     const nextDraft: Record<string, number> = {};
@@ -785,6 +817,12 @@ export function PreMatchPage({
       setRatingLogPage(ratingLogPageCount);
     }
   }, [ratingLogPage, ratingLogPageCount]);
+
+  useEffect(() => {
+    if (matchHistoryPage > matchHistoryPageCount) {
+      setMatchHistoryPage(matchHistoryPageCount);
+    }
+  }, [matchHistoryPage, matchHistoryPageCount]);
 
   useEffect(() => {
     if (
@@ -899,7 +937,7 @@ export function PreMatchPage({
       location: match.location ?? "",
       expectedTeamCount: match.expectedTeamCount,
       status: match.status,
-      notes: match.notes ?? "",
+      ratingMode: match.ratingMode,
     });
     setIsMatchModalOpen(true);
   };
@@ -965,17 +1003,36 @@ export function PreMatchPage({
     }
   };
 
-  const handleResultSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const closeFinalizeModal = () => {
+    setIsFinalizeModalOpen(false);
+    setWinningTeamNumber(null);
+  };
+
+  const submitFinalizeMatch = async (nextWinningTeamNumber: number | null) => {
     if (!match) {
       return;
     }
 
     try {
-      await onUpdateMatchResult(match.id, resultSummary.trim());
+      await onFinalizeMatch(match.id, nextWinningTeamNumber);
+      closeFinalizeModal();
     } catch {
       // Parent banner already surfaces the failure.
     }
+  };
+
+  const openFinalizeMatchFlow = () => {
+    if (!match) {
+      return;
+    }
+
+    if (canChooseWinningTeam) {
+      setWinningTeamNumber(match.winningTeamNumber ?? null);
+      setIsFinalizeModalOpen(true);
+      return;
+    }
+
+    void submitFinalizeMatch(null);
   };
 
   const handleRatingSubmit = async () => {
@@ -1005,85 +1062,6 @@ export function PreMatchPage({
     }
 
     setRatingCardIndex((prev) => (prev + direction + ratingItems.length) % ratingItems.length);
-  };
-
-  const handleExportRound = (format: "csv" | "json") => {
-    if (!match) {
-      return;
-    }
-
-    const baseName = `pelada-${match.scheduledAt.slice(0, 10)}-${match.status.toLowerCase()}`;
-    const attendanceSummary = {
-      participants: attendance.filter((entry) => entry.attendanceStatus === "CONFIRMED").length,
-      total: attendance.length,
-    };
-
-    if (format === "json") {
-      downloadTextFile(
-        `${baseName}.json`,
-        JSON.stringify(
-          {
-            match,
-            attendanceSummary,
-            attendance,
-            generatedTeams,
-            averageOverallGap,
-          },
-          null,
-          2,
-        ),
-        "application/json;charset=utf-8",
-      );
-      return;
-    }
-
-    const attendanceRows = attendance.map((entry) =>
-      [
-        entry.displayName,
-        entry.isGuest ? "Convidado" : "Mensalista",
-        entry.ratings.overall,
-        entry.assignedTeamName || entry.assignedTeamNumber || "",
-        entry.notes || "",
-      ]
-        .map((value) => escapeCsvCell(value))
-        .join(";"),
-    );
-
-    const teamRows = generatedTeams.map((team) =>
-      [
-        team.name,
-        team.players.length,
-        team.totalOverall,
-        team.averageOverall.toFixed(2),
-        team.players.map((player) => player.displayName).join(" | "),
-      ]
-        .map((value) => escapeCsvCell(value))
-        .join(";"),
-    );
-
-    const csvContent = [
-      "Rodada",
-      ["Data", formatDateTime(match.scheduledAt)].map(escapeCsvCell).join(";"),
-      ["Local", match.location || "A definir"].map(escapeCsvCell).join(";"),
-      ["Status", matchStatusLabels[match.status]].map(escapeCsvCell).join(";"),
-      ["Times previstos", match.expectedTeamCount].map(escapeCsvCell).join(";"),
-      ["Resultado", match.resultSummary || ""].map(escapeCsvCell).join(";"),
-      averageOverallGap != null
-        ? ["Gap medio", averageOverallGap.toFixed(2)].map(escapeCsvCell).join(";")
-        : ["Gap medio", ""].map(escapeCsvCell).join(";"),
-      "",
-      "Resumo de participantes",
-      ["Participantes", attendanceSummary.participants].map(escapeCsvCell).join(";"),
-      ["Total", attendanceSummary.total].map(escapeCsvCell).join(";"),
-      "",
-      ["Participante", "Tipo", "Overall", "Time", "Observacoes"].join(";"),
-      ...attendanceRows,
-      "",
-      ["Time", "Jogadores", "Overall total", "Media", "Escalacao"].join(";"),
-      ...teamRows,
-    ].join("\n");
-
-    downloadTextFile(`${baseName}.csv`, csvContent, "text/csv;charset=utf-8");
   };
 
   const handleExportTeamsText = () => {
@@ -1285,461 +1263,423 @@ export function PreMatchPage({
               {isGeneratingTeams ? "Balanceando..." : "Gerar times equilibrados"}
             </button>
           )}
-          {match && (
-            <button type="button" className="ghost-button" onClick={() => handleExportRound("csv")}>
-              Exportar rodada CSV
-            </button>
-          )}
-          {match && (
-            <button type="button" className="ghost-button" onClick={() => handleExportRound("json")}>
-              Exportar rodada JSON
-            </button>
-          )}
         </div>
       </header>
 
       {activeSection === "match" ? (
         <>
-          <div className="pre-match-grid">
-        <div className="glass-card attendance-card">
-          <div className="ledger-heading">
-            <div>
-              <h3>Pelada ativa</h3>
-              {match ? (
-                <small className="muted">
-                  {formatDateTime(match.scheduledAt)}{match.location ? ` · ${match.location}` : ""}
-                </small>
-              ) : (
-                <small className="muted">Crie ou selecione uma pelada para começar.</small>
-              )}
-            </div>
-            {match && (
-              <span className={`status-chip ${match.status.toLowerCase()}`}>
-                {matchStatusLabels[match.status]}
-              </span>
-            )}
-          </div>
-
-          {match ? (
-            <>
-              <div className="match-meta-grid">
-                <div>
-                  <span className="muted">Times previstos</span>
-                  <strong>{match.expectedTeamCount}</strong>
-                </div>
-                <div>
-                  <span className="muted">Participantes</span>
-                  <strong>{confirmedCount}</strong>
-                </div>
-                <div>
-                  <span className="muted">Lista</span>
-                  <strong>{isEditableMatch ? "Aberta" : "Travada"}</strong>
-                </div>
-              </div>
-              {match.notes ? <p className="muted">{match.notes}</p> : null}
-              {canManageMatch && (
-                <div className="match-actions">
-                  {match.status !== "OPEN" && (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      disabled={isSubmittingMatch}
-                      onClick={() => void handleStatusAction("OPEN")}
-                    >
-                      Abrir lista
-                    </button>
-                  )}
-                  {match.status === "OPEN" && (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      disabled={isSubmittingMatch}
-                      onClick={() => void handleStatusAction("CLOSED")}
-                    >
-                      Fechar lista
-                    </button>
-                  )}
-                  {match.status !== "ARCHIVED" && (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      disabled={isSubmittingMatch}
-                      onClick={() => void handleStatusAction("ARCHIVED")}
-                    >
-                      Arquivar
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="empty-state">Nenhuma pelada cadastrada ainda.</p>
-          )}
-        </div>
-
-        <div className="glass-card attendance-card">
-          <div className="ledger-heading">
-            <h3>Histórico de peladas</h3>
-            <span className="muted">{matchHistory.length} registradas</span>
-          </div>
-          {matchHistory.length === 0 ? (
-            <p className="empty-state">Sem histórico por enquanto.</p>
-          ) : (
-            <div className="match-history-list">
-              {matchHistory.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  className={`match-history-item ${match?.id === entry.id ? "active" : ""}`}
-                  onClick={() => onSelectMatch(entry.id)}
-                >
+          <div className="pre-match-layout">
+            <div className="pre-match-main">
+              <div className="glass-card attendance-card">
+                <div className="ledger-heading">
                   <div>
-                    <strong>{formatDateTime(entry.scheduledAt)}</strong>
-                    <small className="muted">
-                      {entry.location || "Local a definir"} · {entry.expectedTeamCount} times
-                    </small>
+                    <h3>Pelada ativa</h3>
+                    {match ? (
+                      <small className="muted">
+                        {formatDateTime(match.scheduledAt)}{match.location ? ` · ${match.location}` : ""}
+                      </small>
+                    ) : (
+                      <small className="muted">Crie ou selecione uma pelada para começar.</small>
+                    )}
                   </div>
-                  <span className={`status-chip ${entry.status.toLowerCase()}`}>
-                    {matchStatusLabels[entry.status]}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+                  {match && (
+                    <span className={`status-chip ${match.status.toLowerCase()}`}>
+                      {matchStatusLabels[match.status]}
+                    </span>
+                  )}
+                </div>
 
-      {match && !isEditableMatch && (
-        <div className="glass-card attendance-card">
-          <div className="ledger-heading">
-            <h3>Lista travada</h3>
-            <span className={`status-chip ${match.status.toLowerCase()}`}>{matchStatusLabels[match.status]}</span>
-          </div>
-          <p className="muted">
-            Essa pelada está fechada ou arquivada. Você ainda pode consultar presença e times gerados, mas não alterar
-            a lista.
-          </p>
-        </div>
-      )}
-
-      {match && (
-        <div className="glass-card attendance-card">
-          <div className="ledger-heading">
-            <div>
-              <h3>Resultado da rodada</h3>
-              <small className="muted">
-                {match.resultRecordedAt
-                  ? `Registrado em ${formatDateTime(match.resultRecordedAt)}`
-                  : "Ainda sem resultado salvo"}
-              </small>
+                {match ? (
+                  <>
+                    <div className="match-meta-grid">
+                      <div>
+                        <span className="muted">Times previstos</span>
+                        <strong>{match.expectedTeamCount}</strong>
+                      </div>
+                      <div>
+                        <span className="muted">Participantes</span>
+                        <strong>{confirmedCount}</strong>
+                      </div>
+                      <div>
+                        <span className="muted">Lista</span>
+                        <strong>{isEditableMatch ? "Aberta" : "Travada"}</strong>
+                      </div>
+                      <div>
+                        <span className="muted">Votação</span>
+                        <strong>{match.ratingMode === "GENERAL" ? "Geral" : "Entre os times"}</strong>
+                      </div>
+                      {winningTeamLabel ? (
+                        <div>
+                          <span className="muted">Vencedor</span>
+                          <strong>{winningTeamLabel}</strong>
+                        </div>
+                      ) : null}
+                    </div>
+                    {canManageMatch && (
+                      <div className="match-actions">
+                        {match.status !== "OPEN" && (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={isSubmittingMatch}
+                            onClick={() => void handleStatusAction("OPEN")}
+                          >
+                            Abrir lista
+                          </button>
+                        )}
+                        {match.status !== "ARCHIVED" && (
+                          <button
+                            type="button"
+                            className="primary-button"
+                            disabled={isSubmittingMatch}
+                            onClick={openFinalizeMatchFlow}
+                          >
+                            Finalizar pelada
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="empty-state">Nenhuma pelada cadastrada ainda.</p>
+                )}
             </div>
-            {match.teamsGeneratedAt ? (
-              <span className="muted">Times gerados em {formatDateTime(match.teamsGeneratedAt)}</span>
-            ) : (
-              <span className="muted">Sem escalações geradas ainda</span>
-            )}
-          </div>
-          {canManageMatch ? (
-            <form className="result-form" onSubmit={handleResultSubmit}>
-              <label className="form-span-2">
-                Resumo final
-                <textarea
-                  className="input-field textarea-field"
-                  value={resultSummary}
-                  onChange={(event) => setResultSummary(event.target.value)}
-                  placeholder="Ex.: Time Roxo 7 x 5 Time Cinza. Destaques da rodada..."
-                />
-              </label>
-              <div className="section-actions">
-                <button type="submit" className="primary-button" disabled={isSubmittingMatch}>
-                  {isSubmittingMatch ? "Salvando..." : "Salvar resultado"}
-                </button>
+
+            {canEditAttendance && match && (
+              <div className="pre-match-grid">
+                <div className="glass-card attendance-card">
+                  <div className="ledger-heading">
+                    <h3>Confirmar mensalista</h3>
+                    <span className="muted">{availablePlayers.length} disponíveis</span>
+                  </div>
+                  <div className="inline-form">
+                    <select
+                      className="input-field"
+                      value={selectedPlayerId}
+                      onChange={(event) => setSelectedPlayerId(event.target.value)}
+                    >
+                      <option value="">Selecione um jogador</option>
+                      {availablePlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.fullName} · {player.ratings.overall} OVR
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={!selectedPlayerId || isSubmittingAttendance}
+                      onClick={() => void handleConfirmPlayer()}
+                    >
+                      Confirmar presença
+                    </button>
+                  </div>
+                </div>
+
+                <form className="glass-card attendance-card" onSubmit={handleAddGuest}>
+                  <div className="ledger-heading">
+                    <h3>Adicionar convidado</h3>
+                    <span className="muted">Snapshot próprio</span>
+                  </div>
+                  <div className="form-grid compact-grid">
+                    <label className="form-span-2">
+                      Nome
+                      <input
+                        className="input-field"
+                        value={guestValues.displayName}
+                        onChange={handleGuestField("displayName")}
+                        required
+                      />
+                    </label>
+                    <label className="form-span-2">
+                      Overall
+                      <input
+                        className="input-field"
+                        type="number"
+                        min="0"
+                        max="99"
+                        value={guestValues.ratings.overall}
+                        onChange={handleGuestRating("overall")}
+                      />
+                    </label>
+                    <label className="form-span-2">
+                      Responsável pela cobrança
+                      <select
+                        className="input-field"
+                        value={guestValues.invitedById ?? ""}
+                        onChange={handleGuestField("invitedById")}
+                        required
+                      >
+                        <option value="">Selecione um jogador do elenco</option>
+                        {responsiblePlayerOptions.map((player) => (
+                          <option key={player.id} value={player.id}>
+                            {player.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="form-span-2">
+                      Observações
+                      <textarea
+                        className="input-field textarea-field"
+                        value={guestValues.notes ?? ""}
+                        onChange={handleGuestField("notes")}
+                      />
+                    </label>
+                  </div>
+                  <div className="section-actions">
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={isSubmittingAttendance || !canSubmitGuest}
+                    >
+                      {isSubmittingAttendance ? "Salvando..." : "Adicionar convidado"}
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
-          ) : match.resultSummary ? (
-            <p>{match.resultSummary}</p>
-          ) : (
-            <p className="empty-state">O resultado dessa rodada ainda não foi publicado.</p>
-          )}
-        </div>
-      )}
+            )}
 
-      {canEditAttendance && match && (
-        <div className="pre-match-grid">
-          <div className="glass-card attendance-card">
-            <div className="ledger-heading">
-              <h3>Confirmar mensalista</h3>
-              <span className="muted">{availablePlayers.length} disponíveis</span>
-            </div>
-            <div className="inline-form">
-              <select
-                className="input-field"
-                value={selectedPlayerId}
-                onChange={(event) => setSelectedPlayerId(event.target.value)}
-              >
-                <option value="">Selecione um jogador</option>
-                {availablePlayers.map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.fullName} · {player.ratings.overall} OVR
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={!selectedPlayerId || isSubmittingAttendance}
-                onClick={() => void handleConfirmPlayer()}
-              >
-                Confirmar presença
-              </button>
-            </div>
-          </div>
-
-          <form className="glass-card attendance-card" onSubmit={handleAddGuest}>
-            <div className="ledger-heading">
-              <h3>Adicionar convidado</h3>
-              <span className="muted">Snapshot próprio</span>
-            </div>
-            <div className="form-grid compact-grid">
-              <label className="form-span-2">
-                Nome
-                <input
-                  className="input-field"
-                  value={guestValues.displayName}
-                  onChange={handleGuestField("displayName")}
-                  required
-                />
-              </label>
-              <label className="form-span-2">
-                Overall
-                <input
-                  className="input-field"
-                  type="number"
-                  min="0"
-                  max="99"
-                  value={guestValues.ratings.overall}
-                  onChange={handleGuestRating("overall")}
-                />
-              </label>
-              <label className="form-span-2">
-                Responsável pela cobrança
-                <select
-                  className="input-field"
-                  value={guestValues.invitedById ?? ""}
-                  onChange={handleGuestField("invitedById")}
-                  required
-                >
-                  <option value="">Selecione um jogador do elenco</option>
-                  {responsiblePlayerOptions.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.fullName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="form-span-2">
-                Observações
-                <textarea
-                  className="input-field textarea-field"
-                  value={guestValues.notes ?? ""}
-                  onChange={handleGuestField("notes")}
-                />
-              </label>
-            </div>
-            <div className="section-actions">
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={isSubmittingAttendance || !canSubmitGuest}
-              >
-                {isSubmittingAttendance ? "Salvando..." : "Adicionar convidado"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {match && guestFeeDebts.length > 0 && (
-        <div className="glass-card attendance-card">
-          <div className="ledger-heading">
-            <div>
-              <h3>Pendências de convidados</h3>
-              <small className="muted">
-                {guestFeeDebts.length} convidado(s) com taxa avulsa pendente
-              </small>
-            </div>
-            <span className="status-chip pending">
-              {currencyFormatter.format(
-                guestFeeDebts.reduce((total, entry) => total + entry.guestFeeOutstanding, 0),
-              )}
-            </span>
-          </div>
-          <div className="guest-fee-list">
-            {guestFeeDebts.map((entry) => (
-              <article key={entry.id} className="guest-fee-row">
-                <div>
-                  <strong>{entry.displayName}</strong>
-                  <p className="muted">Taxa de convidado da rodada</p>
-                  <p className="muted">
-                    Responsável: {entry.invitedByName ?? "Nao informado"}
-                  </p>
+              <div className="glass-card attendance-card">
+                <div className="ledger-heading">
+                  <h3>Lista de presença</h3>
+                  <span className="muted">{confirmedCount} participantes</span>
                 </div>
-                <div className="guest-fee-actions">
-                  <strong>{currencyFormatter.format(entry.guestFeeOutstanding)}</strong>
+                {isLoading ? (
+                  <p className="muted">Sincronizando presença...</p>
+                ) : attendance.length === 0 ? (
+                  <p className="empty-state">Nenhuma presença registrada ainda.</p>
+                ) : (
+                  attendance.map((entry) => (
+                    <article key={entry.id} className="attendance-row attendance-row-rich">
+                      <div>
+                        <strong>{entry.displayName}</strong>
+                        <p className="muted">
+                          {entry.isGuest ? "Convidado" : "Mensalista"} · {entry.ratings.overall} OVR
+                        </p>
+                        {entry.isGuest && (
+                          <p className={`guest-fee-inline ${entry.guestFeeIsDue ? "warning" : entry.guestFeeStatus.toLowerCase()}`}>
+                            Taxa convidado:{" "}
+                            {entry.guestFeeStatus === "PAID"
+                              ? "paga"
+                              : entry.guestFeeStatus === "WAIVED"
+                                ? "desconsiderada"
+                              : entry.guestFeeIsDue
+                                ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
+                                : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
+                          </p>
+                        )}
+                      </div>
+                      <div className="attendance-controls">
+                        <span className="muted">{attendanceStatusLabels[entry.attendanceStatus]}</span>
+                        {canEditAttendance && (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={isSubmittingAttendance}
+                            onClick={() => void onRemoveAttendance(entry.id)}
+                          >
+                            Remover
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+
+            <div className="team-board glass-card">
+              <div className="ledger-heading">
+                <div>
+                  <h3>Times sugeridos</h3>
+                  <span className="muted">
+                    Gap médio {averageOverallGap?.toFixed(2) ?? "0.00"}
+                    {selectedTeamPlayerOverall != null
+                      ? ` · ${selectedTeamPlayerName} ${selectedTeamPlayerOverall} OVR`
+                      : ""}
+                  </span>
+                </div>
+                <div className="team-board-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={!match || generatedTeams.length === 0}
+                    onClick={handleExportTeamsText}
+                  >
+                    Exportar texto
+                  </button>
                   {canManageMatch && (
-                    <>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        disabled={isSubmittingAttendance}
-                        onClick={() => void onMarkGuestFeePaid(entry.id)}
-                      >
-                        Marcar pago
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        disabled={isSubmittingAttendance}
-                        onClick={() => void onWaiveGuestFee(entry.id)}
-                      >
-                        Desconsiderar
-                      </button>
-                    </>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="pre-match-grid">
-        <div className="glass-card attendance-card">
-          <div className="ledger-heading">
-            <h3>Lista de presença</h3>
-            <span className="muted">{confirmedCount} participantes</span>
-          </div>
-          {isLoading ? (
-            <p className="muted">Sincronizando presença...</p>
-          ) : attendance.length === 0 ? (
-            <p className="empty-state">Nenhuma presença registrada ainda.</p>
-          ) : (
-            attendance.map((entry) => (
-              <article key={entry.id} className="attendance-row attendance-row-rich">
-                <div>
-                  <strong>{entry.displayName}</strong>
-                  <p className="muted">
-                    {entry.isGuest ? "Convidado" : "Mensalista"} · {entry.ratings.overall} OVR
-                  </p>
-                  {entry.isGuest && (
-                    <p className={`guest-fee-inline ${entry.guestFeeIsDue ? "warning" : entry.guestFeeStatus.toLowerCase()}`}>
-                      Taxa convidado:{" "}
-                      {entry.guestFeeStatus === "PAID"
-                        ? "paga"
-                        : entry.guestFeeStatus === "WAIVED"
-                          ? "desconsiderada"
-                        : entry.guestFeeIsDue
-                          ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
-                          : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
-                    </p>
-                  )}
-                </div>
-                <div className="attendance-controls">
-                  <span className="muted">{attendanceStatusLabels[entry.attendanceStatus]}</span>
-                  {canEditAttendance && (
                     <button
                       type="button"
                       className="ghost-button"
-                      disabled={isSubmittingAttendance}
-                      onClick={() => void onRemoveAttendance(entry.id)}
+                      disabled={
+                        !canClearGeneratedTeams ||
+                        isGeneratingTeams ||
+                        isClearingTeams ||
+                        isSwappingTeamPlayers
+                      }
+                      onClick={() => void onClearGeneratedTeams()}
                     >
-                      Remover
+                      {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
                     </button>
                   )}
                 </div>
-              </article>
-            ))
-          )}
-        </div>
+              </div>
+              <div className="team-rows">
+                {generatedTeams.length === 0 ? (
+                  <p className="empty-state">Gere os times para ver uma sugestão balanceada.</p>
+                ) : (
+                  generatedTeams.map((team, teamIndex) => (
+                    <article key={team.name} className="team-card">
+                      <header>
+                        <h4>{team.name}</h4>
+                        <p className="muted">{team.players.length} jogadores</p>
+                      </header>
+                      <ul>
+                        {team.players.map((player) => (
+                          <li key={player.id}>
+                            <button
+                              type="button"
+                              className={getTeamPlayerButtonClass(
+                                player.id,
+                                teamIndex,
+                                player.ratings.overall,
+                              )}
+                              disabled={isSwappingTeamPlayers}
+                              onClick={() => void handleTeamPlayerClick(player.id)}
+                              aria-pressed={selectedTeamPlayer?.player.id === player.id}
+                              aria-label={`${player.displayName}, ${player.ratings.overall} overall`}
+                            >
+                              <span>{player.displayName}</span>
+                              <strong>{player.ratings.overall} OVR</strong>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      <footer>
+                        <span>Total {team.totalOverall}</span>
+                        <span>Média {team.averageOverall.toFixed(1)}</span>
+                      </footer>
+                    </article>
+                  ))
+                )}
+              </div>
+            </div>
+            </div>
 
-        <div className="team-board glass-card">
-          <div className="ledger-heading">
-            <div>
-              <h3>Times sugeridos</h3>
-              <span className="muted">
-                Gap médio {averageOverallGap?.toFixed(2) ?? "0.00"}
-                {selectedTeamPlayerOverall != null
-                  ? ` · ${selectedTeamPlayerName} ${selectedTeamPlayerOverall} OVR`
-                  : ""}
-              </span>
-            </div>
-            <div className="team-board-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={!match || generatedTeams.length === 0}
-                onClick={handleExportTeamsText}
-              >
-                Exportar texto
-              </button>
-              {canManageMatch && (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={
-                    !canClearGeneratedTeams ||
-                    isGeneratingTeams ||
-                    isClearingTeams ||
-                    isSwappingTeamPlayers
-                  }
-                  onClick={() => void onClearGeneratedTeams()}
-                >
-                  {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="team-rows">
-            {generatedTeams.length === 0 ? (
-              <p className="empty-state">Gere os times para ver uma sugestão balanceada.</p>
-            ) : (
-              generatedTeams.map((team, teamIndex) => (
-                <article key={team.name} className="team-card">
-                  <header>
-                    <h4>{team.name}</h4>
-                    <p className="muted">{team.players.length} jogadores</p>
-                  </header>
-                  <ul>
-                    {team.players.map((player) => (
-                      <li key={player.id}>
+            <aside className="pre-match-aside">
+              <div className="glass-card attendance-card">
+                <div className="ledger-heading">
+                  <h3>Histórico de peladas</h3>
+                  <span className="muted">{matchHistory.length} registradas</span>
+                </div>
+                {matchHistory.length === 0 ? (
+                  <p className="empty-state">Sem histórico por enquanto.</p>
+                ) : (
+                  <>
+                    <div className="match-history-list">
+                      {paginatedMatchHistory.map((entry) => (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          className={`match-history-item ${match?.id === entry.id ? "active" : ""}`}
+                          onClick={() => onSelectMatch(entry.id)}
+                        >
+                          <div className="match-history-info">
+                            <strong>{formatDateTime(entry.scheduledAt)}</strong>
+                            <small className="muted">{entry.location || "Local a definir"}</small>
+                            <small className="muted">{entry.expectedTeamCount} times</small>
+                          </div>
+                          <span className={`status-chip ${entry.status.toLowerCase()}`}>
+                            {matchStatusLabels[entry.status]}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {matchHistoryPageCount > 1 && (
+                      <div className="rating-log-pagination">
                         <button
                           type="button"
-                          className={getTeamPlayerButtonClass(
-                            player.id,
-                            teamIndex,
-                            player.ratings.overall,
-                          )}
-                          disabled={isSwappingTeamPlayers}
-                          onClick={() => void handleTeamPlayerClick(player.id)}
-                          aria-pressed={selectedTeamPlayer?.player.id === player.id}
-                          aria-label={`${player.displayName}, ${player.ratings.overall} overall`}
+                          className="secondary-button"
+                          disabled={currentMatchHistoryPage <= 1}
+                          onClick={() => setMatchHistoryPage((page) => Math.max(1, page - 1))}
                         >
-                          <span>{player.displayName}</span>
-                          <strong>{player.ratings.overall} OVR</strong>
+                          ‹
                         </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <footer>
-                    <span>Total {team.totalOverall}</span>
-                    <span>Média {team.averageOverall.toFixed(1)}</span>
-                  </footer>
-                </article>
-              ))
-            )}
+                        <span>
+                          Página {currentMatchHistoryPage} de {matchHistoryPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={currentMatchHistoryPage >= matchHistoryPageCount}
+                          onClick={() =>
+                            setMatchHistoryPage((page) => Math.min(matchHistoryPageCount, page + 1))
+                          }
+                        >
+                          ›
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </aside>
           </div>
-        </div>
-      </div>
+
+          {match && guestFeeDebts.length > 0 && (
+            <div className="glass-card attendance-card">
+              <div className="ledger-heading">
+                <div>
+                  <h3>Pendências de convidados</h3>
+                  <small className="muted">
+                    {guestFeeDebts.length} convidado(s) com taxa avulsa pendente
+                  </small>
+                </div>
+                <span className="status-chip pending">
+                  {currencyFormatter.format(
+                    guestFeeDebts.reduce((total, entry) => total + entry.guestFeeOutstanding, 0),
+                  )}
+                </span>
+              </div>
+              <div className="guest-fee-list">
+                {guestFeeDebts.map((entry) => (
+                  <article key={entry.id} className="guest-fee-row">
+                    <div>
+                      <strong>{entry.displayName}</strong>
+                      <p className="muted">Taxa de convidado da rodada</p>
+                      <p className="muted">
+                        Responsável: {entry.invitedByName ?? "Nao informado"}
+                      </p>
+                    </div>
+                    <div className="guest-fee-actions">
+                      <strong>{currencyFormatter.format(entry.guestFeeOutstanding)}</strong>
+                      {canManageMatch && (
+                        <>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={isSubmittingAttendance}
+                            onClick={() => void onMarkGuestFeePaid(entry.id)}
+                          >
+                            Marcar pago
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={isSubmittingAttendance}
+                            onClick={() => void onWaiveGuestFee(entry.id)}
+                          >
+                            Desconsiderar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
 
         </>
       ) : (
@@ -1760,6 +1700,7 @@ export function PreMatchPage({
                     ? `Janela aberta até ${formatDateTime(ratingState.windowClosesAt)}`
                     : "A votação abre por 24 horas após o arquivamento da pelada."}
               </small>
+              {match && <small className="muted">{ratingModeHints[match.ratingMode]}</small>}
             </div>
             <div className="rating-arena-actions">
               <div className="rating-arena-score">
@@ -2125,19 +2066,21 @@ export function PreMatchPage({
                   value={matchValues.status}
                   onChange={handleMatchField("status")}
                 >
-                  <option value="DRAFT">{matchStatusLabels.DRAFT}</option>
                   <option value="OPEN">{matchStatusLabels.OPEN}</option>
-                  <option value="CLOSED">{matchStatusLabels.CLOSED}</option>
                   <option value="ARCHIVED">{matchStatusLabels.ARCHIVED}</option>
                 </select>
               </label>
               <label className="form-span-2">
-                Observações
-                <textarea
-                  className="input-field textarea-field"
-                  value={matchValues.notes ?? ""}
-                  onChange={handleMatchField("notes")}
-                />
+                Votação após a finalização
+                <select
+                  className="input-field"
+                  value={matchValues.ratingMode}
+                  onChange={handleMatchField("ratingMode")}
+                >
+                  <option value="TEAM">{ratingModeLabels.TEAM}</option>
+                  <option value="GENERAL">{ratingModeLabels.GENERAL}</option>
+                </select>
+                <small className="muted">{ratingModeHints[matchValues.ratingMode]}</small>
               </label>
               <div className="section-actions form-span-2">
                 <button type="button" className="ghost-button" onClick={closeMatchModal}>
@@ -2152,6 +2095,57 @@ export function PreMatchPage({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isFinalizeModalOpen && match && (
+        <div className="modal-backdrop">
+          <div className="modal-card glass-card">
+            <div className="ledger-heading">
+              <div>
+                <p className="eyebrow">Peladas</p>
+                <h3>Finalizar pelada</h3>
+              </div>
+              <button type="button" className="ghost-button" onClick={closeFinalizeModal}>
+                Fechar
+              </button>
+            </div>
+            <p className="muted">
+              Escolha o time vencedor para somar +1 vitória no currículo de cada jogador dele.
+            </p>
+            <div className="form-grid">
+              <label className="form-span-2">
+                Time vencedor
+                <select
+                  className="input-field"
+                  value={winningTeamNumber == null ? "" : String(winningTeamNumber)}
+                  onChange={(event) =>
+                    setWinningTeamNumber(event.target.value ? Number(event.target.value) : null)
+                  }
+                >
+                  <option value="">Sem vencedor (empate)</option>
+                  {matchTeamOptions.map((team) => (
+                    <option key={team.number} value={team.number}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="section-actions form-span-2">
+                <button type="button" className="ghost-button" onClick={closeFinalizeModal}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={isSubmittingMatch}
+                  onClick={() => void submitFinalizeMatch(winningTeamNumber)}
+                >
+                  {isSubmittingMatch ? "Finalizando..." : "Finalizar pelada"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

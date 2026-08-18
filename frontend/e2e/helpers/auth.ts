@@ -180,7 +180,7 @@ export async function mockApiSession(page: Page, role: SessionRole) {
             {
               match_id: "match-1",
               scheduled_at: "2026-04-06T20:00:00Z",
-              match_status: "CLOSED",
+              match_status: "ARCHIVED",
               attendance_status: "CONFIRMED",
               assigned_team_name: "Time Roxo",
             },
@@ -206,7 +206,7 @@ export async function mockApiSession(page: Page, role: SessionRole) {
 
 export async function login(page: Page, identifier: string, password: string) {
   await page.goto("/login");
-  await page.getByLabel("Identificador").fill(identifier);
+  await page.getByLabel("Usuário ou celular").fill(identifier);
   await page.getByLabel("Senha").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
 }
