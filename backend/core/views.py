@@ -1366,6 +1366,14 @@ class MatchViewSet(viewsets.ModelViewSet):
                 attendance_entry = allowed_entries.get(attendance_id)
                 if not attendance_entry:
                     raise ValidationError({"ratings": invalid_rating_message})
+                if item["score"] is None:
+                    # Voto pulado: o votante optou por nao avaliar este jogador.
+                    MatchPlayerRating.objects.filter(
+                        match=match,
+                        rater_user=request.user,
+                        rated_attendance=attendance_entry,
+                    ).delete()
+                    continue
                 MatchPlayerRating.objects.update_or_create(
                     match=match,
                     rater_user=request.user,

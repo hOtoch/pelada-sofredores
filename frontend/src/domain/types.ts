@@ -235,7 +235,8 @@ export interface MatchStatsImportSummary {
 
 export interface MatchPlayerRatingInput {
   attendanceId: string;
-  score: number;
+  /** `null` quando o votante optou por pular a votacao deste jogador. */
+  score: number | null;
 }
 
 export interface MatchPlayerRatingLogEntry {

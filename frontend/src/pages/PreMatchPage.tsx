@@ -625,6 +625,7 @@ export function PreMatchPage({
   const [matchValues, setMatchValues] = useState<MatchFormValues>(createDefaultMatchForm);
   const [ratingDraft, setRatingDraft] = useState<Record<string, number>>({});
   const [ratingCardIndex, setRatingCardIndex] = useState(0);
+  const [skippedRatings, setSkippedRatings] = useState<string[]>([]);
   const [ratingLogRaterFilter, setRatingLogRaterFilter] = useState("");
   const [ratingLogRatedFilter, setRatingLogRatedFilter] = useState("");
   const [ratingLogDateFilter, setRatingLogDateFilter] = useState("");
@@ -658,8 +659,15 @@ export function PreMatchPage({
   const ratingItems = ratingState?.items ?? [];
   const ratingLogEntries = ratingState?.log ?? [];
   const completedRatingCount = ratingItems.filter((item) => Boolean(ratingDraft[item.attendanceId])).length;
+  const skippedRatingCount = ratingItems.filter((item) =>
+    skippedRatings.includes(item.attendanceId),
+  ).length;
+  const pendingRatingCount = ratingItems.length - completedRatingCount - skippedRatingCount;
   const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
   const activeRatingScore = activeRatingItem ? ratingDraft[activeRatingItem.attendanceId] ?? 0 : 0;
+  const isActiveRatingSkipped = Boolean(
+    activeRatingItem && skippedRatings.includes(activeRatingItem.attendanceId),
+  );
   const activeRatingSliderValue = activeRatingScore || 5.5;
   const activeRatingMeterPercent = activeRatingScore ? ((activeRatingScore - 1) / 9) * 100 : 0;
   const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
@@ -792,10 +800,19 @@ export function PreMatchPage({
       }
     });
     setRatingDraft(nextDraft);
+    setSkippedRatings((prev) => {
+      const next = prev.filter((attendanceId) =>
+        (ratingState?.items ?? []).some(
+          (item) => item.attendanceId === attendanceId && !item.score,
+        ),
+      );
+      return next.length === prev.length ? prev : next;
+    });
   }, [ratingState]);
 
   useEffect(() => {
     setRatingCardIndex(0);
+    setSkippedRatings([]);
     setRatingLogRaterFilter("");
     setRatingLogRatedFilter("");
     setRatingLogDateFilter("");
@@ -1040,12 +1057,20 @@ export function PreMatchPage({
       return;
     }
 
-    const ratings: MatchPlayerRatingInput[] = ratingState.items.map((item) => ({
-      attendanceId: item.attendanceId,
-      score: ratingDraft[item.attendanceId],
-    }));
+    // Jogadores pulados vao com nota nula: o backend remove qualquer voto anterior deles.
+    const ratings: MatchPlayerRatingInput[] = ratingState.items
+      .filter(
+        (item) =>
+          Boolean(ratingDraft[item.attendanceId]) || skippedRatings.includes(item.attendanceId),
+      )
+      .map((item) => ({
+        attendanceId: item.attendanceId,
+        score: skippedRatings.includes(item.attendanceId)
+          ? null
+          : ratingDraft[item.attendanceId],
+      }));
 
-    if (ratings.some((rating) => !rating.score)) {
+    if (ratings.length === 0 || ratings.every((rating) => rating.score === null)) {
       return;
     }
 
@@ -1062,6 +1087,60 @@ export function PreMatchPage({
     }
 
     setRatingCardIndex((prev) => (prev + direction + ratingItems.length) % ratingItems.length);
+  };
+
+  const goToNextPendingRatingCard = (justResolvedAttendanceId: string) => {
+    if (ratingItems.length < 2) {
+      return;
+    }
+
+    for (let offset = 1; offset <= ratingItems.length; offset += 1) {
+      const index = (ratingCardIndex + offset) % ratingItems.length;
+      const candidate = ratingItems[index];
+      const isPending =
+        candidate.attendanceId !== justResolvedAttendanceId &&
+        !ratingDraft[candidate.attendanceId] &&
+        !skippedRatings.includes(candidate.attendanceId);
+
+      if (isPending) {
+        setRatingCardIndex(index);
+        return;
+      }
+    }
+
+    handleRatingCardStep(1);
+  };
+
+  const handleRatingScoreChange = (attendanceId: string, score: number) => {
+    setSkippedRatings((prev) =>
+      prev.includes(attendanceId) ? prev.filter((id) => id !== attendanceId) : prev,
+    );
+    setRatingDraft((prev) => ({ ...prev, [attendanceId]: score }));
+  };
+
+  const handleToggleSkipRating = () => {
+    if (!activeRatingItem) {
+      return;
+    }
+
+    const { attendanceId } = activeRatingItem;
+
+    if (skippedRatings.includes(attendanceId)) {
+      setSkippedRatings((prev) => prev.filter((id) => id !== attendanceId));
+      return;
+    }
+
+    setSkippedRatings((prev) => [...prev, attendanceId]);
+    setRatingDraft((prev) => {
+      if (!(attendanceId in prev)) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[attendanceId];
+      return next;
+    });
+    goToNextPendingRatingCard(attendanceId);
   };
 
   const handleExportTeamsText = () => {
@@ -1709,9 +1788,9 @@ export function PreMatchPage({
             <div className="rating-arena-actions">
               <div className="rating-arena-score">
                 <span>
-                  {completedRatingCount}/{ratingItems.length}
+                  {completedRatingCount + skippedRatingCount}/{ratingItems.length}
                 </span>
-                <small>cards completos</small>
+                <small>cards resolvidos</small>
               </div>
               {canManageMatch && (
                 <button
@@ -1775,7 +1854,9 @@ export function PreMatchPage({
 
                     {activeRatingItem && (
                       <article
-                        className={`rating-player-card rating-carousel-card ${activeRatingScore ? "rated" : ""}`}
+                        className={`rating-player-card rating-carousel-card ${
+                          activeRatingScore ? "rated" : ""
+                        } ${isActiveRatingSkipped ? "skipped" : ""}`}
                       >
                         <header>
                           <div>
@@ -1795,8 +1876,14 @@ export function PreMatchPage({
 
                         <div className="rating-impact-panel" aria-live="polite">
                           <div className="rating-selected-score">
-                            <span>Nota</span>
-                            <strong>{activeRatingScore ? activeRatingScore.toFixed(1) : "-"}</strong>
+                            <span>{isActiveRatingSkipped ? "Pulado" : "Nota"}</span>
+                            <strong>
+                              {isActiveRatingSkipped
+                                ? "--"
+                                : activeRatingScore
+                                  ? activeRatingScore.toFixed(1)
+                                  : "-"}
+                            </strong>
                           </div>
                           <div className="rating-score-summary">
                             <div className="rating-score-meter" aria-hidden="true">
@@ -1822,10 +1909,7 @@ export function PreMatchPage({
                                 value={activeRatingSliderValue}
                                 onChange={(event) => {
                                   const nextScore = Number(Number(event.target.value).toFixed(1));
-                                  setRatingDraft((prev) => ({
-                                    ...prev,
-                                    [activeRatingItem.attendanceId]: nextScore,
-                                  }));
+                                  handleRatingScoreChange(activeRatingItem.attendanceId, nextScore);
                                 }}
                               />
                             </label>
@@ -1838,16 +1922,29 @@ export function PreMatchPage({
                                     activeRatingScore === score ? "active" : ""
                                   }`}
                                   onClick={() =>
-                                    setRatingDraft((prev) => ({
-                                      ...prev,
-                                      [activeRatingItem.attendanceId]: score,
-                                    }))
+                                    handleRatingScoreChange(activeRatingItem.attendanceId, score)
                                   }
                                 >
                                   {score}
                                 </button>
                               ))}
                             </div>
+                            <button
+                              type="button"
+                              className={`rating-skip-button ${isActiveRatingSkipped ? "active" : ""}`}
+                              onClick={handleToggleSkipRating}
+                              aria-pressed={isActiveRatingSkipped}
+                            >
+                              {isActiveRatingSkipped
+                                ? "Voltar a avaliar este jogador"
+                                : "Pular este jogador"}
+                            </button>
+                            {isActiveRatingSkipped && (
+                              <p className="rating-skip-hint">
+                                Você optou por não votar em {activeRatingItem.displayName}. Nenhuma
+                                nota sua será contabilizada para ele nesta pelada.
+                              </p>
+                            )}
                           </div>
                         ) : (
                           <p className="empty-state">
@@ -1886,9 +1983,20 @@ export function PreMatchPage({
                         <button
                           key={item.attendanceId}
                           type="button"
-                          className={index === ratingCardIndex ? "active" : ""}
+                          className={[
+                            index === ratingCardIndex ? "active" : "",
+                            skippedRatings.includes(item.attendanceId)
+                              ? "skipped"
+                              : ratingDraft[item.attendanceId]
+                                ? "rated"
+                                : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
                           onClick={() => setRatingCardIndex(index)}
-                          aria-label={`Ir para ${item.displayName}`}
+                          aria-label={`Ir para ${item.displayName}${
+                            skippedRatings.includes(item.attendanceId) ? " (pulado)" : ""
+                          }`}
                         />
                       ))}
                     </div>
@@ -1896,13 +2004,19 @@ export function PreMatchPage({
 
                   {ratingState.canRate && (
                     <div className="rating-submit-row">
+                      <span className="rating-submit-progress">
+                        {completedRatingCount} avaliado(s)
+                        {skippedRatingCount > 0 ? ` · ${skippedRatingCount} pulado(s)` : ""}
+                        {pendingRatingCount > 0 ? ` · ${pendingRatingCount} pendente(s)` : ""}
+                      </span>
                       <button
                         type="button"
                         className="primary-button rating-submit-button"
                         disabled={
                           isSubmittingRatings ||
                           ratingItems.length === 0 ||
-                          ratingItems.some((item) => !ratingDraft[item.attendanceId])
+                          pendingRatingCount > 0 ||
+                          completedRatingCount === 0
                         }
                         onClick={() => void handleRatingSubmit()}
                       >

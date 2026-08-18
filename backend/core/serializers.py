@@ -473,6 +473,7 @@ class MatchPlayerRatingInputItemSerializer(serializers.Serializer):
         decimal_places=1,
         min_value=Decimal("1.0"),
         max_value=Decimal("10.0"),
+        allow_null=True,
     )
 
 

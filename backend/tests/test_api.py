@@ -1006,6 +1006,61 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(opponent_response.status_code, 400)
         self.assertEqual(self_response.status_code, 400)
 
+    def test_rater_can_skip_a_player_and_skipping_removes_a_previous_vote(self) -> None:
+        self.common_user.linked_player = self.players[0]
+        self.common_user.save(update_fields=["linked_player"])
+        self.match.status = Match.Status.ARCHIVED
+        self.match.archived_at = timezone.now()
+        self.match.rating_mode = Match.RatingMode.GENERAL
+        self.match.save(update_fields=["status", "archived_at", "rating_mode"])
+        MatchAttendance.objects.filter(match=self.match).update(assigned_team_number=None)
+        rated_attendance = MatchAttendance.objects.get(match=self.match, player=self.players[1])
+        skipped_attendance = MatchAttendance.objects.get(match=self.match, player=self.players[2])
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        skip_response = self.client.post(
+            f"/api/matches/{self.match.id}/player-ratings/",
+            {
+                "ratings": [
+                    {"attendance_id": str(rated_attendance.id), "score": 8},
+                    {"attendance_id": str(skipped_attendance.id), "score": None},
+                ]
+            },
+            format="json",
+        )
+        rated_ids_after_skip = set(
+            MatchPlayerRating.objects.filter(
+                match=self.match, rater_user=self.common_user
+            ).values_list("rated_attendance_id", flat=True)
+        )
+
+        vote_response = self.client.post(
+            f"/api/matches/{self.match.id}/player-ratings/",
+            {"ratings": [{"attendance_id": str(skipped_attendance.id), "score": 9}]},
+            format="json",
+        )
+        unvote_response = self.client.post(
+            f"/api/matches/{self.match.id}/player-ratings/",
+            {
+                "ratings": [
+                    {"attendance_id": str(rated_attendance.id), "score": 8},
+                    {"attendance_id": str(skipped_attendance.id), "score": None},
+                ]
+            },
+            format="json",
+        )
+        rated_ids_after_unvote = set(
+            MatchPlayerRating.objects.filter(
+                match=self.match, rater_user=self.common_user
+            ).values_list("rated_attendance_id", flat=True)
+        )
+
+        self.assertEqual(skip_response.status_code, 200)
+        self.assertEqual(rated_ids_after_skip, {rated_attendance.id})
+        self.assertEqual(vote_response.status_code, 200)
+        self.assertEqual(unvote_response.status_code, 200)
+        self.assertEqual(rated_ids_after_unvote, {rated_attendance.id})
+
     def test_general_rating_mode_lets_player_rate_everyone_except_themselves(self) -> None:
         self.common_user.linked_player = self.players[0]
         self.common_user.save(update_fields=["linked_player"])

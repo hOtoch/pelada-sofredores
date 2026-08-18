@@ -1924,6 +1924,50 @@ button {
   animation: rating-score-pop 0.24s cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 
+.rating-skip-button {
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.82rem;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.rating-skip-button:hover {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.08);
+  color: var(--color-text-primary);
+}
+
+.rating-skip-button.active {
+  border-style: solid;
+  border-color: rgba(251, 191, 36, 0.6);
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
+.rating-skip-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.rating-player-card.skipped {
+  border-color: rgba(251, 191, 36, 0.34);
+}
+
+.rating-player-card.skipped .rating-score-slider,
+.rating-player-card.skipped .rating-score-meter {
+  opacity: 0.42;
+}
+
 .rating-player-card footer {
   position: relative;
   display: flex;
@@ -1941,7 +1985,16 @@ button {
 .rating-submit-row {
   position: relative;
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.rating-submit-progress {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .rating-submit-button {
@@ -1964,9 +2017,21 @@ button {
   cursor: pointer;
 }
 
+.rating-carousel-dots button.rated {
+  background: rgba(52, 211, 153, 0.62);
+}
+
+.rating-carousel-dots button.skipped {
+  background: rgba(251, 191, 36, 0.62);
+}
+
 .rating-carousel-dots button.active {
   width: 28px;
   background: #34d399;
+}
+
+.rating-carousel-dots button.active.skipped {
+  background: #fbbf24;
 }
 
 .rating-log-panel {

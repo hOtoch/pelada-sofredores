@@ -1177,7 +1177,7 @@ export async function getOverallHistory(token: string) {
 export async function submitMatchPlayerRatings(
   token: string,
   matchId: string,
-  ratings: Array<{ attendanceId: string; score: number }>,
+  ratings: Array<{ attendanceId: string; score: number | null }>,
 ) {
   const data = await request<RawMatchPlayerRatingState>(
     `/matches/${matchId}/player-ratings/`,
