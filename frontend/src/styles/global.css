@@ -1238,12 +1238,20 @@ button {
 
 .pre-match-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   align-items: start;
   gap: 1rem;
+  min-width: 0;
 }
 
-/* Two-column shell: primary flow on the left, match history as a side rail. */
+/*
+ * Two-column shell. The left column carries the match summary, the attendance
+ * list and the team board; the right rail stacks the "add player" forms over
+ * the match history. Each column is an independent stack, so a short card never
+ * leaves a dead row of whitespace beside a tall one. Below the breakpoint both
+ * wrappers collapse with `display: contents` and `order` restores the natural
+ * reading sequence in a single column.
+ */
 .pre-match-layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
@@ -1251,26 +1259,54 @@ button {
   gap: 1rem;
 }
 
-.pre-match-main {
+.pre-match-main,
+.pre-match-rail {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   min-width: 0;
 }
 
-.pre-match-aside {
-  position: sticky;
-  top: 1rem;
-  min-width: 0;
+.pre-match-grid .inline-form {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 @media (max-width: 1080px) {
   .pre-match-layout {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .pre-match-main,
+  .pre-match-rail {
+    display: contents;
+  }
+
+  .pre-match-summary {
+    order: 1;
+  }
+
+  .pre-match-grid {
+    order: 2;
+  }
+
+  .pre-match-list {
+    order: 3;
+  }
+
+  .pre-match-layout .team-board {
+    order: 4;
   }
 
   .pre-match-aside {
-    position: static;
+    order: 5;
+  }
+
+  .pre-match-grid .inline-form {
+    flex-direction: row;
+    align-items: flex-end;
   }
 }
 
@@ -2092,6 +2128,42 @@ button {
   gap: 1rem;
 }
 
+.attendance-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.attendance-list .attendance-row {
+  padding: 0.8rem 0.9rem;
+  border-bottom: none;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.attendance-list .attendance-row > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1081px) {
+  .attendance-list .attendance-controls {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+  }
+}
+
+@media (max-width: 1080px) {
+  .attendance-list .attendance-row {
+    padding: 0.7rem 0.85rem;
+  }
+}
+
 .attendance-controls {
   display: flex;
   align-items: center;
@@ -2116,8 +2188,9 @@ button {
 }
 
 .team-rows {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: start;
   gap: 1rem;
   margin-top: 1rem;
 }

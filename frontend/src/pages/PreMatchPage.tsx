@@ -1270,7 +1270,7 @@ export function PreMatchPage({
         <>
           <div className="pre-match-layout">
             <div className="pre-match-main">
-              <div className="glass-card attendance-card">
+            <div className="glass-card attendance-card pre-match-summary">
                 <div className="ledger-heading">
                   <div>
                     <h3>Pelada ativa</h3>
@@ -1345,6 +1345,136 @@ export function PreMatchPage({
                 )}
             </div>
 
+              <div className="glass-card attendance-card pre-match-list">
+                <div className="ledger-heading">
+                  <h3>Lista de presença</h3>
+                  <span className="muted">{confirmedCount} participantes</span>
+                </div>
+                {isLoading ? (
+                  <p className="muted">Sincronizando presença...</p>
+                ) : attendance.length === 0 ? (
+                  <p className="empty-state">Nenhuma presença registrada ainda.</p>
+                ) : (
+                  <div className="attendance-list">
+                    {attendance.map((entry) => (
+                      <article key={entry.id} className="attendance-row attendance-row-rich">
+                        <div>
+                          <strong>{entry.displayName}</strong>
+                          <p className="muted">
+                            {entry.isGuest ? "Convidado" : "Mensalista"} · {entry.ratings.overall} OVR
+                          </p>
+                          {entry.isGuest && (
+                            <p className={`guest-fee-inline ${entry.guestFeeIsDue ? "warning" : entry.guestFeeStatus.toLowerCase()}`}>
+                              Taxa convidado:{" "}
+                              {entry.guestFeeStatus === "PAID"
+                                ? "paga"
+                                : entry.guestFeeStatus === "WAIVED"
+                                  ? "desconsiderada"
+                                : entry.guestFeeIsDue
+                                  ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
+                                  : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
+                            </p>
+                          )}
+                        </div>
+                        <div className="attendance-controls">
+                          <span className="muted">{attendanceStatusLabels[entry.attendanceStatus]}</span>
+                          {canEditAttendance && (
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              disabled={isSubmittingAttendance}
+                              onClick={() => void onRemoveAttendance(entry.id)}
+                            >
+                              Remover
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            <div className="team-board glass-card">
+              <div className="ledger-heading">
+                <div>
+                  <h3>Times sugeridos</h3>
+                  <span className="muted">
+                    Gap médio {averageOverallGap?.toFixed(2) ?? "0.00"}
+                    {selectedTeamPlayerOverall != null
+                      ? ` · ${selectedTeamPlayerName} ${selectedTeamPlayerOverall} OVR`
+                      : ""}
+                  </span>
+                </div>
+                <div className="team-board-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={!match || generatedTeams.length === 0}
+                    onClick={handleExportTeamsText}
+                  >
+                    Exportar texto
+                  </button>
+                  {canManageMatch && (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={
+                        !canClearGeneratedTeams ||
+                        isGeneratingTeams ||
+                        isClearingTeams ||
+                        isSwappingTeamPlayers
+                      }
+                      onClick={() => void onClearGeneratedTeams()}
+                    >
+                      {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="team-rows">
+                {generatedTeams.length === 0 ? (
+                  <p className="empty-state">Gere os times para ver uma sugestão balanceada.</p>
+                ) : (
+                  generatedTeams.map((team, teamIndex) => (
+                    <article key={team.name} className="team-card">
+                      <header>
+                        <h4>{team.name}</h4>
+                        <p className="muted">{team.players.length} jogadores</p>
+                      </header>
+                      <ul>
+                        {team.players.map((player) => (
+                          <li key={player.id}>
+                            <button
+                              type="button"
+                              className={getTeamPlayerButtonClass(
+                                player.id,
+                                teamIndex,
+                                player.ratings.overall,
+                              )}
+                              disabled={isSwappingTeamPlayers}
+                              onClick={() => void handleTeamPlayerClick(player.id)}
+                              aria-pressed={selectedTeamPlayer?.player.id === player.id}
+                              aria-label={`${player.displayName}, ${player.ratings.overall} overall`}
+                            >
+                              <span>{player.displayName}</span>
+                              <strong>{player.ratings.overall} OVR</strong>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      <footer>
+                        <span>Total {team.totalOverall}</span>
+                        <span>Média {team.averageOverall.toFixed(1)}</span>
+                      </footer>
+                    </article>
+                  ))
+                )}
+              </div>
+            </div>
+            </div>
+
+            <div className="pre-match-rail">
             {canEditAttendance && match && (
               <div className="pre-match-grid">
                 <div className="glass-card attendance-card">
@@ -1440,133 +1570,6 @@ export function PreMatchPage({
               </div>
             )}
 
-              <div className="glass-card attendance-card">
-                <div className="ledger-heading">
-                  <h3>Lista de presença</h3>
-                  <span className="muted">{confirmedCount} participantes</span>
-                </div>
-                {isLoading ? (
-                  <p className="muted">Sincronizando presença...</p>
-                ) : attendance.length === 0 ? (
-                  <p className="empty-state">Nenhuma presença registrada ainda.</p>
-                ) : (
-                  attendance.map((entry) => (
-                    <article key={entry.id} className="attendance-row attendance-row-rich">
-                      <div>
-                        <strong>{entry.displayName}</strong>
-                        <p className="muted">
-                          {entry.isGuest ? "Convidado" : "Mensalista"} · {entry.ratings.overall} OVR
-                        </p>
-                        {entry.isGuest && (
-                          <p className={`guest-fee-inline ${entry.guestFeeIsDue ? "warning" : entry.guestFeeStatus.toLowerCase()}`}>
-                            Taxa convidado:{" "}
-                            {entry.guestFeeStatus === "PAID"
-                              ? "paga"
-                              : entry.guestFeeStatus === "WAIVED"
-                                ? "desconsiderada"
-                              : entry.guestFeeIsDue
-                                ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
-                                : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
-                          </p>
-                        )}
-                      </div>
-                      <div className="attendance-controls">
-                        <span className="muted">{attendanceStatusLabels[entry.attendanceStatus]}</span>
-                        {canEditAttendance && (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            disabled={isSubmittingAttendance}
-                            onClick={() => void onRemoveAttendance(entry.id)}
-                          >
-                            Remover
-                          </button>
-                        )}
-                      </div>
-                    </article>
-                  ))
-                )}
-              </div>
-
-            <div className="team-board glass-card">
-              <div className="ledger-heading">
-                <div>
-                  <h3>Times sugeridos</h3>
-                  <span className="muted">
-                    Gap médio {averageOverallGap?.toFixed(2) ?? "0.00"}
-                    {selectedTeamPlayerOverall != null
-                      ? ` · ${selectedTeamPlayerName} ${selectedTeamPlayerOverall} OVR`
-                      : ""}
-                  </span>
-                </div>
-                <div className="team-board-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    disabled={!match || generatedTeams.length === 0}
-                    onClick={handleExportTeamsText}
-                  >
-                    Exportar texto
-                  </button>
-                  {canManageMatch && (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      disabled={
-                        !canClearGeneratedTeams ||
-                        isGeneratingTeams ||
-                        isClearingTeams ||
-                        isSwappingTeamPlayers
-                      }
-                      onClick={() => void onClearGeneratedTeams()}
-                    >
-                      {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="team-rows">
-                {generatedTeams.length === 0 ? (
-                  <p className="empty-state">Gere os times para ver uma sugestão balanceada.</p>
-                ) : (
-                  generatedTeams.map((team, teamIndex) => (
-                    <article key={team.name} className="team-card">
-                      <header>
-                        <h4>{team.name}</h4>
-                        <p className="muted">{team.players.length} jogadores</p>
-                      </header>
-                      <ul>
-                        {team.players.map((player) => (
-                          <li key={player.id}>
-                            <button
-                              type="button"
-                              className={getTeamPlayerButtonClass(
-                                player.id,
-                                teamIndex,
-                                player.ratings.overall,
-                              )}
-                              disabled={isSwappingTeamPlayers}
-                              onClick={() => void handleTeamPlayerClick(player.id)}
-                              aria-pressed={selectedTeamPlayer?.player.id === player.id}
-                              aria-label={`${player.displayName}, ${player.ratings.overall} overall`}
-                            >
-                              <span>{player.displayName}</span>
-                              <strong>{player.ratings.overall} OVR</strong>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                      <footer>
-                        <span>Total {team.totalOverall}</span>
-                        <span>Média {team.averageOverall.toFixed(1)}</span>
-                      </footer>
-                    </article>
-                  ))
-                )}
-              </div>
-            </div>
-            </div>
-
             <aside className="pre-match-aside">
               <div className="glass-card attendance-card">
                 <div className="ledger-heading">
@@ -1625,6 +1628,7 @@ export function PreMatchPage({
                 )}
               </div>
             </aside>
+            </div>
           </div>
 
           {match && guestFeeDebts.length > 0 && (
