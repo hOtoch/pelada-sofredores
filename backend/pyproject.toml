@@ -1,0 +1,35 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    "*/migrations/*",
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "DJ",  # flake8-django
+    "C4",  # comprehensions
+    "SIM", # simplify
+]
+ignore = [
+    "E501",   # comprimento de linha e responsabilidade do formatter
+    "B008",   # chamada em default de argumento (padrao comum no DRF)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+"*/settings.py" = ["F403", "F405"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "apps", "peladinha"]
+
+[tool.ruff.format]
+quote-style = "double"

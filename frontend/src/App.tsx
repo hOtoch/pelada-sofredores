@@ -26,7 +26,6 @@ import type {
   MatchStatsImportSummary,
   MatchSummary,
   OverallHistorySnapshot,
-  PlayerRatings,
   PlayerSummary,
   SportsRankingSnapshot,
   TransactionRecord,
@@ -137,10 +136,6 @@ const emptyCashFlow: CashFlowSummary = {
   inflowTotal: 0,
   outflowTotal: 0,
   pendingTotal: 0,
-};
-
-const defaultRatings: PlayerRatings = {
-  overall: 70,
 };
 
 const defaultRosterFilters: PlayerFilterState = {
@@ -536,7 +531,7 @@ export default function App() {
           setCurrentUser(user);
           setLoginError(undefined);
         }
-      } catch (error) {
+      } catch {
         if (!isCancelled) {
           localStorage.removeItem(AUTH_TOKEN_KEY);
           setToken(null);

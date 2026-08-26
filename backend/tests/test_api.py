@@ -10,7 +10,16 @@ from openpyxl import load_workbook
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
-from core.models import Match, MatchAttendance, MatchPlayerRating, MatchPlayerStat, Player, Role, Transaction, User
+from core.models import (
+    Match,
+    MatchAttendance,
+    MatchPlayerRating,
+    MatchPlayerStat,
+    Player,
+    Role,
+    Transaction,
+    User,
+)
 
 
 class ApiFlowTests(APITestCase):
@@ -1369,7 +1378,7 @@ class ApiFlowTests(APITestCase):
         self.match.archived_at = timezone.now()
         self.match.save(update_fields=["status", "archived_at"])
         scores = (Decimal("1.0"), Decimal("6.1"), Decimal("6.5"), Decimal("10.0"))
-        for rater, score in zip(raters, scores):
+        for rater, score in zip(raters, scores, strict=False):
             MatchPlayerRating.objects.create(
                 match=self.match,
                 rater_user=rater,

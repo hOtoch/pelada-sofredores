@@ -1,0 +1,58 @@
+# Instalacao (uma vez por clone):
+#   pip install -r backend/requirements-dev.txt
+#   pre-commit install
+# Rodar em todo o repo:
+#   pre-commit run --all-files
+
+default_install_hook_types: [pre-commit]
+exclude: |
+  (?x)^(
+    frontend/node_modules/|
+    frontend/dist/|
+    frontend/playwright-report/|
+    frontend/test-results/|
+    frontend/package-lock\.json|
+    .*/migrations/
+  )
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # Node roda a partir do node_modules do frontend, para usar a mesma versao do CI.
+  # Os hooks rodam o frontend inteiro (prettier e eslint tem cache proprio); se o
+  # prettier reescrever algum arquivo, o commit falha e basta dar `git add` de novo.
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (frontend)
+        entry: npm run --silent format --prefix frontend
+        language: system
+        pass_filenames: false
+        files: ^frontend/(src|e2e)/.*\.(ts|tsx|css|json)$
+
+      - id: eslint
+        name: eslint (frontend)
+        entry: npm run --silent lint --prefix frontend
+        language: system
+        pass_filenames: false
+        files: ^frontend/(src|e2e)/.*\.(ts|tsx)$

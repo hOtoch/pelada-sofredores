@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - v2-nova-versao
   pull_request:
 
 jobs:
@@ -22,6 +23,12 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r backend/requirements-dev.txt
+
+      - name: Ruff lint
+        run: cd backend && ruff check .
+
+      - name: Ruff format check
+        run: cd backend && ruff format --check .
 
       - name: Run migrations (SQLite)
         run: USE_SQLITE=true python backend/manage.py migrate --noinput
@@ -48,6 +55,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --prefix frontend
+
+      - name: Prettier check
+        run: npm run format:check --prefix frontend
+
+      - name: ESLint
+        run: npm run lint --prefix frontend
+
+      - name: Typecheck
+        run: npm run typecheck --prefix frontend
 
       - name: Build frontend
         run: npm run build --prefix frontend

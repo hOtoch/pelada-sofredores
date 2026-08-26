@@ -1,10 +1,10 @@
 """Unit tests for the team balancing implementation."""
 
-from decimal import Decimal
 import unittest
+from decimal import Decimal
 
 from apps.teams.balancer import GreedyTeamBalancer
-from apps.teams.contracts import BalanceablePlayer, TeamGenerationRequest, TeamBalanceConfig
+from apps.teams.contracts import BalanceablePlayer, TeamBalanceConfig, TeamGenerationRequest
 
 
 def _fake_player(player_id: str, overall: int) -> BalanceablePlayer:

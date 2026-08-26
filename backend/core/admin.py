@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import Match, MatchAttendance, MatchPlayerRating, MatchPlayerStat, Player, Transaction, User
+from .models import (
+    Match,
+    MatchAttendance,
+    MatchPlayerRating,
+    MatchPlayerStat,
+    Player,
+    Transaction,
+    User,
+)
 
 
 @admin.register(User)

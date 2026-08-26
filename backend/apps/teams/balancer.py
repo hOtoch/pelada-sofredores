@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import List
 
 from .contracts import (
     BalanceablePlayer,
+    BalancedTeam,
     TeamGenerationRequest,
     TeamGenerationResult,
-    BalancedTeam,
 )
 
 
@@ -20,7 +19,7 @@ class _TeamSlot:
         self.index = index
         self.name = f"Time {index + 1}"
         self.capacity = capacity
-        self.players: List[BalanceablePlayer] = []
+        self.players: list[BalanceablePlayer] = []
         self.total_overall = 0
 
     def can_receive(self) -> bool:
@@ -68,7 +67,7 @@ class GreedyTeamBalancer:
         defensive_gap = max(defensive_counts) - min(defensive_counts) if defensive_counts else 0
         averages = [
             Decimal(total) / Decimal(size)
-            for total, size in zip(totals, sizes)
+            for total, size in zip(totals, sizes, strict=False)
             if size > 0
         ]
         average_gap = max(averages) - min(averages) if averages else Decimal("0")
@@ -137,7 +136,7 @@ class GreedyTeamBalancer:
             return None
 
         slots = self._build_slots(len(players), team_count)
-        for slot, assigned_players in zip(slots, best_assignments):
+        for slot, assigned_players in zip(slots, best_assignments, strict=False):
             for player in assigned_players:
                 slot.add_player(player)
         return slots

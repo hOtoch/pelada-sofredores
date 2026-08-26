@@ -3,27 +3,41 @@ from __future__ import annotations
 import io
 import unicodedata
 from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 
-from django.http import HttpResponse
 from django.db import transaction
 from django.db.models import Case, Count, DecimalField, F, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
+from django.http import HttpResponse
 from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from rest_framework import status, viewsets
-from rest_framework.exceptions import ValidationError
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.teams import BalanceablePlayer, GreedyTeamBalancer, TeamBalanceConfig, TeamGenerationRequest
+from apps.teams import (
+    BalanceablePlayer,
+    GreedyTeamBalancer,
+    TeamBalanceConfig,
+    TeamGenerationRequest,
+)
 
-from .models import Match, MatchAttendance, MatchPlayerRating, MatchPlayerStat, Player, Role, Transaction, User
+from .models import (
+    Match,
+    MatchAttendance,
+    MatchPlayerRating,
+    MatchPlayerStat,
+    Player,
+    Role,
+    Transaction,
+    User,
+)
 from .permissions import IsAdminOrReadOnly
 from .serializers import (
     AdminResetPasswordSerializer,
@@ -34,8 +48,8 @@ from .serializers import (
     MatchFinalizeSerializer,
     MatchPlayerRatingStateSerializer,
     MatchPlayerRatingSubmitSerializer,
-    MatchStatsImportSummarySerializer,
     MatchSerializer,
+    MatchStatsImportSummarySerializer,
     PaymentRankingSerializer,
     PlayerSerializer,
     PortalOverviewSerializer,

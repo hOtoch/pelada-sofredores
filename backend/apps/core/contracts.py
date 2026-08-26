@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Protocol, Sequence
+from typing import Protocol
 from uuid import UUID
 
 from apps.teams.contracts import TeamGenerationResult
