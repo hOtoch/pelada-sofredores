@@ -4,6 +4,7 @@ import heroWide from "../assets/sofredor-hero-1200.webp";
 import heroNarrow from "../assets/sofredor-hero-800.webp";
 import sofredoresLogo from "../assets/sofredores-logo.png";
 import type { LoginFormValues, LoginPageProps, SignupFormValues } from "../features/auth/contracts";
+import { pickLoginFootnote } from "../features/auth/copy";
 import "../features/auth/login.css";
 
 const initialValues: LoginFormValues = {
@@ -34,6 +35,8 @@ export function LoginPage({
   const [signupValues, setSignupValues] = useState(initialSignupValues);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [localSignupError, setLocalSignupError] = useState<string>();
+  // sorteada uma vez por visita, para nao trocar de frase a cada render
+  const [footnote] = useState(pickLoginFootnote);
   const id = useId();
 
   const handleChange = (field: keyof LoginFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
@@ -83,10 +86,11 @@ export function LoginPage({
             alt="Jogador do Sofredores F.C. cabeceando a bola de cigarro na boca, com a torcida ao fundo"
           />
           <div className="login-art-copy">
-            <p className="login-kicker">Sofredores F.C. · fundado no sufoco</p>
-            <h1 className="login-headline">Bora sofrer de novo?</h1>
+            <p className="login-kicker">Sofredores F.C. · a votação está aberta</p>
+            <h1 className="login-headline">Seu overall não mente.</h1>
             <p className="login-subline">
-              Confirma presença, acerta a mensalidade e finge que treinou a semana toda.
+              Confirma presença, dá nota pra quem mereceu e descobre se o overall subiu ou se foi só
+              impressão sua.
             </p>
           </div>
         </div>
@@ -100,7 +104,7 @@ export function LoginPage({
               <img src={sofredoresLogo} alt="" className="login-box-logo" />
               <div>
                 <h2 className="login-box-title">Vestiário</h2>
-                <p className="login-box-subtitle">Só quem está escalado passa desta tela.</p>
+                <p className="login-box-subtitle">A votação já abriu. Entra e assume o prejuízo.</p>
               </div>
             </div>
 
@@ -123,7 +127,7 @@ export function LoginPage({
                   value={values.password}
                   onChange={handleChange("password")}
                   className="input-field"
-                  placeholder="aquela senha de sempre"
+                  placeholder="a senha, nao o seu overall"
                   autoComplete="current-password"
                 />
               </label>
@@ -154,9 +158,7 @@ export function LoginPage({
               )}
             </form>
 
-            <p className="login-footnote">
-              Cigarro no intervalo conta como aquecimento? Aqui a gente finge que sim.
-            </p>
+            <p className="login-footnote">{footnote}</p>
           </div>
         </div>
       </section>
