@@ -35,9 +35,17 @@ urlpatterns = [
     path("auth/change-password/", AuthChangePasswordView.as_view(), name="auth-change-password"),
     path("dashboard/financial-summary/", FinancialSummaryView.as_view(), name="financial-summary"),
     path("portal/me/overview/", PortalOverviewView.as_view(), name="portal-overview"),
-    path("analytics/season-overview/", SeasonOverviewView.as_view(), name="analytics-season-overview"),
-    path("analytics/presence-ranking/", PresenceRankingView.as_view(), name="analytics-presence-ranking"),
-    path("analytics/payment-ranking/", PaymentRankingView.as_view(), name="analytics-payment-ranking"),
+    path(
+        "analytics/season-overview/", SeasonOverviewView.as_view(), name="analytics-season-overview"
+    ),
+    path(
+        "analytics/presence-ranking/",
+        PresenceRankingView.as_view(),
+        name="analytics-presence-ranking",
+    ),
+    path(
+        "analytics/payment-ranking/", PaymentRankingView.as_view(), name="analytics-payment-ranking"
+    ),
     path("analytics/sports-ranking/", SportsRankingView.as_view(), name="analytics-sports-ranking"),
     *router.urls,
 ]

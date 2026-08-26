@@ -201,7 +201,11 @@ const buildOverallHistoryPath = (points: Array<{ x: number; y: number } | null>)
   return path.trim();
 };
 
-const getRatingWindowStartedAt = (match: { archivedAt?: string | null; updatedAt?: string; scheduledAt: string }) => {
+const getRatingWindowStartedAt = (match: {
+  archivedAt?: string | null;
+  updatedAt?: string;
+  scheduledAt: string;
+}) => {
   const timestamp = Date.parse(match.archivedAt ?? match.updatedAt ?? match.scheduledAt);
   return Number.isFinite(timestamp) ? timestamp : null;
 };
@@ -316,10 +320,7 @@ function OverallHistoryPanel({
   const tooltipWidth = 236;
   const tooltipHeight = 92;
   const tooltipX = hoveredPoint
-    ? Math.min(
-        Math.max(hoveredPoint.x + 16, margin.left + 6),
-        width - margin.right - tooltipWidth,
-      )
+    ? Math.min(Math.max(hoveredPoint.x + 16, margin.left + 6), width - margin.right - tooltipWidth)
     : 0;
   const tooltipY = hoveredPoint
     ? Math.min(
@@ -527,7 +528,9 @@ function OverallHistoryPanel({
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
-                    {hoveredPoint.location ? ` · ${truncateTooltipText(hoveredPoint.location, 18)}` : ""}
+                    {hoveredPoint.location
+                      ? ` · ${truncateTooltipText(hoveredPoint.location, 18)}`
+                      : ""}
                   </text>
                   <text x="18" y="76" className="overall-history-tooltip-overall">
                     {hoveredPoint.overall} OVR
@@ -537,10 +540,15 @@ function OverallHistoryPanel({
                       x="118"
                       y="76"
                       className={`overall-history-tooltip-delta ${
-                        hoveredPoint.delta > 0 ? "positive" : hoveredPoint.delta < 0 ? "negative" : ""
+                        hoveredPoint.delta > 0
+                          ? "positive"
+                          : hoveredPoint.delta < 0
+                            ? "negative"
+                            : ""
                       }`}
                     >
-                      {hoveredPoint.delta > 0 ? `+${hoveredPoint.delta}` : hoveredPoint.delta} desde anterior
+                      {hoveredPoint.delta > 0 ? `+${hoveredPoint.delta}` : hoveredPoint.delta} desde
+                      anterior
                     </text>
                   ) : null}
                 </g>
@@ -633,7 +641,9 @@ export function PreMatchPage({
   const [matchHistoryPage, setMatchHistoryPage] = useState(1);
   const [selectedTeamPlayerId, setSelectedTeamPlayerId] = useState<string | null>(null);
 
-  const confirmedCount = attendance.filter((entry) => entry.attendanceStatus === "CONFIRMED").length;
+  const confirmedCount = attendance.filter(
+    (entry) => entry.attendanceStatus === "CONFIRMED",
+  ).length;
   const isEditableMatch = match?.status === "OPEN";
   const canEditAttendance = canManageAttendance && isEditableMatch;
   const canRunGeneration = canManageMatch && isEditableMatch && confirmedCount >= 2;
@@ -642,35 +652,41 @@ export function PreMatchPage({
   const overallSummary = ratingState?.overallSummary ?? [];
   const canFinalizeRatings = Boolean(
     canManageMatch &&
-      match?.status === "ARCHIVED" &&
-      ratingState &&
-      !ratingState.ratingsFinalizedAt &&
-      onFinalizeRatings,
+    match?.status === "ARCHIVED" &&
+    ratingState &&
+    !ratingState.ratingsFinalizedAt &&
+    onFinalizeRatings,
   );
   const canRecalculateRatings = Boolean(
     canManageMatch &&
-      ratingState?.ratingsFinalizedAt &&
-      overallSummary.some((item) => item.ratingCount > 0) &&
-      onRecalculateRatings,
+    ratingState?.ratingsFinalizedAt &&
+    overallSummary.some((item) => item.ratingCount > 0) &&
+    onRecalculateRatings,
   );
   const canExportOverallImage = Boolean(
     canManageMatch && ratingState?.ratingsFinalizedAt && overallSummary.length > 0,
   );
   const ratingItems = ratingState?.items ?? [];
   const ratingLogEntries = ratingState?.log ?? [];
-  const completedRatingCount = ratingItems.filter((item) => Boolean(ratingDraft[item.attendanceId])).length;
+  const completedRatingCount = ratingItems.filter((item) =>
+    Boolean(ratingDraft[item.attendanceId]),
+  ).length;
   const skippedRatingCount = ratingItems.filter((item) =>
     skippedRatings.includes(item.attendanceId),
   ).length;
   const pendingRatingCount = ratingItems.length - completedRatingCount - skippedRatingCount;
   const activeRatingItem = ratingItems[ratingCardIndex] ?? null;
-  const activeRatingScore = activeRatingItem ? ratingDraft[activeRatingItem.attendanceId] ?? 0 : 0;
+  const activeRatingScore = activeRatingItem
+    ? (ratingDraft[activeRatingItem.attendanceId] ?? 0)
+    : 0;
   const isActiveRatingSkipped = Boolean(
     activeRatingItem && skippedRatings.includes(activeRatingItem.attendanceId),
   );
   const activeRatingSliderValue = activeRatingScore || 5.5;
   const activeRatingMeterPercent = activeRatingScore ? ((activeRatingScore - 1) / 9) * 100 : 0;
-  const guestFeeDebts = attendance.filter((entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0);
+  const guestFeeDebts = attendance.filter(
+    (entry) => entry.guestFeeIsDue && entry.guestFeeOutstanding > 0,
+  );
   const responsiblePlayerOptions = useMemo(
     () =>
       responsiblePlayers
@@ -702,8 +718,8 @@ export function PreMatchPage({
   const canChooseWinningTeam = matchTeamOptions.length === 2;
   const winningTeamLabel =
     match?.winningTeamNumber != null
-      ? matchTeamOptions.find((team) => team.number === match.winningTeamNumber)?.name ??
-        `Time ${match.winningTeamNumber}`
+      ? (matchTeamOptions.find((team) => team.number === match.winningTeamNumber)?.name ??
+        `Time ${match.winningTeamNumber}`)
       : null;
 
   const matchHistory = useMemo(
@@ -727,13 +743,12 @@ export function PreMatchPage({
   );
   const selectedRatingWindowIsClosed = Boolean(
     activeSection === "ratings" &&
-      match?.status === "ARCHIVED" &&
-      ratingState?.ratingsFinalizedAt &&
-      ratingItems.length === 0,
+    match?.status === "ARCHIVED" &&
+    ratingState?.ratingsFinalizedAt &&
+    ratingItems.length === 0,
   );
   const shouldShowOverallHistory =
-    activeSection === "ratings" &&
-    (!hasOpenRatingWindow || selectedRatingWindowIsClosed);
+    activeSection === "ratings" && (!hasOpenRatingWindow || selectedRatingWindowIsClosed);
   const ratingLogRaterOptions = useMemo(() => {
     const options = new Map<string, string>();
     ratingLogEntries.forEach((entry) => {
@@ -757,8 +772,10 @@ export function PreMatchPage({
       ratingLogEntries.filter((entry) => {
         const matchesRater =
           !ratingLogRaterFilter || getRatingLogRaterFilterValue(entry) === ratingLogRaterFilter;
-        const matchesRated = !ratingLogRatedFilter || entry.ratedAttendanceId === ratingLogRatedFilter;
-        const matchesDate = !ratingLogDateFilter || toDateInputValue(entry.updatedAt) === ratingLogDateFilter;
+        const matchesRated =
+          !ratingLogRatedFilter || entry.ratedAttendanceId === ratingLogRatedFilter;
+        const matchesDate =
+          !ratingLogDateFilter || toDateInputValue(entry.updatedAt) === ratingLogDateFilter;
         return matchesRater && matchesRated && matchesDate;
       }),
     [ratingLogDateFilter, ratingLogEntries, ratingLogRatedFilter, ratingLogRaterFilter],
@@ -775,7 +792,7 @@ export function PreMatchPage({
     [generatedTeams],
   );
   const selectedTeamPlayer = selectedTeamPlayerId
-    ? generatedTeamPlayers.find((entry) => entry.player.id === selectedTeamPlayerId) ?? null
+    ? (generatedTeamPlayers.find((entry) => entry.player.id === selectedTeamPlayerId) ?? null)
     : null;
   const selectedTeamPlayerName = selectedTeamPlayer?.player.displayName ?? "";
   const selectedTeamPlayerOverall = selectedTeamPlayer?.player.ratings.overall ?? null;
@@ -915,8 +932,7 @@ export function PreMatchPage({
     };
 
   const handleGuestRating =
-    (field: keyof GuestFormValues["ratings"]) =>
-    (event: ChangeEvent<HTMLInputElement>) => {
+    (field: keyof GuestFormValues["ratings"]) => (event: ChangeEvent<HTMLInputElement>) => {
       const value = Number(event.target.value);
       setGuestValues((prev) => ({
         ...prev,
@@ -1065,9 +1081,7 @@ export function PreMatchPage({
       )
       .map((item) => ({
         attendanceId: item.attendanceId,
-        score: skippedRatings.includes(item.attendanceId)
-          ? null
-          : ratingDraft[item.attendanceId],
+        score: skippedRatings.includes(item.attendanceId) ? null : ratingDraft[item.attendanceId],
       }));
 
     if (ratings.length === 0 || ratings.every((rating) => rating.score === null)) {
@@ -1155,7 +1169,9 @@ export function PreMatchPage({
       [
         `${team.name} (${team.players.length} jogadores)`,
         `Overall total: ${team.totalOverall} | Media: ${team.averageOverall.toFixed(1)}`,
-        ...team.players.map((player, index) => `${index + 1}. ${player.displayName} - ${player.ratings.overall} OVR`),
+        ...team.players.map(
+          (player, index) => `${index + 1}. ${player.displayName} - ${player.ratings.overall} OVR`,
+        ),
       ].join("\n"),
     );
 
@@ -1318,7 +1334,9 @@ export function PreMatchPage({
         <div>
           <p className="eyebrow">{activeSection === "ratings" ? "Notas" : "Pré-Jogo"}</p>
           <h2 style={{ fontFamily: themeTokens.fontFamily.heading }}>
-            {match ? `Pelada de ${formatDateTime(match.scheduledAt)}` : "Nenhuma pelada selecionada"}
+            {match
+              ? `Pelada de ${formatDateTime(match.scheduledAt)}`
+              : "Nenhuma pelada selecionada"}
           </h2>
         </div>
         <div className="section-actions">
@@ -1349,13 +1367,14 @@ export function PreMatchPage({
         <>
           <div className="pre-match-layout">
             <div className="pre-match-main">
-            <div className="glass-card attendance-card pre-match-summary">
+              <div className="glass-card attendance-card pre-match-summary">
                 <div className="ledger-heading">
                   <div>
                     <h3>Pelada ativa</h3>
                     {match ? (
                       <small className="muted">
-                        {formatDateTime(match.scheduledAt)}{match.location ? ` · ${match.location}` : ""}
+                        {formatDateTime(match.scheduledAt)}
+                        {match.location ? ` · ${match.location}` : ""}
                       </small>
                     ) : (
                       <small className="muted">Crie ou selecione uma pelada para começar.</small>
@@ -1385,7 +1404,9 @@ export function PreMatchPage({
                       </div>
                       <div>
                         <span className="muted">Votação</span>
-                        <strong>{match.ratingMode === "GENERAL" ? "Geral" : "Entre os times"}</strong>
+                        <strong>
+                          {match.ratingMode === "GENERAL" ? "Geral" : "Entre os times"}
+                        </strong>
                       </div>
                       {winningTeamLabel ? (
                         <div>
@@ -1422,7 +1443,7 @@ export function PreMatchPage({
                 ) : (
                   <p className="empty-state">Nenhuma pelada cadastrada ainda.</p>
                 )}
-            </div>
+              </div>
 
               <div className="glass-card attendance-card pre-match-list">
                 <div className="ledger-heading">
@@ -1440,23 +1461,28 @@ export function PreMatchPage({
                         <div>
                           <strong>{entry.displayName}</strong>
                           <p className="muted">
-                            {entry.isGuest ? "Convidado" : "Mensalista"} · {entry.ratings.overall} OVR
+                            {entry.isGuest ? "Convidado" : "Mensalista"} · {entry.ratings.overall}{" "}
+                            OVR
                           </p>
                           {entry.isGuest && (
-                            <p className={`guest-fee-inline ${entry.guestFeeIsDue ? "warning" : entry.guestFeeStatus.toLowerCase()}`}>
+                            <p
+                              className={`guest-fee-inline ${entry.guestFeeIsDue ? "warning" : entry.guestFeeStatus.toLowerCase()}`}
+                            >
                               Taxa convidado:{" "}
                               {entry.guestFeeStatus === "PAID"
                                 ? "paga"
                                 : entry.guestFeeStatus === "WAIVED"
                                   ? "desconsiderada"
-                                : entry.guestFeeIsDue
-                                  ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
-                                  : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
+                                  : entry.guestFeeIsDue
+                                    ? `${currencyFormatter.format(entry.guestFeeOutstanding)} pendente`
+                                    : `${currencyFormatter.format(entry.guestFeeAmount)} ao final da pelada`}
                             </p>
                           )}
                         </div>
                         <div className="attendance-controls">
-                          <span className="muted">{attendanceStatusLabels[entry.attendanceStatus]}</span>
+                          <span className="muted">
+                            {attendanceStatusLabels[entry.attendanceStatus]}
+                          </span>
                           {canEditAttendance && (
                             <button
                               type="button"
@@ -1474,239 +1500,241 @@ export function PreMatchPage({
                 )}
               </div>
 
-            <div className="team-board glass-card">
-              <div className="ledger-heading">
-                <div>
-                  <h3>Times sugeridos</h3>
-                  <span className="muted">
-                    Gap médio {averageOverallGap?.toFixed(2) ?? "0.00"}
-                    {selectedTeamPlayerOverall != null
-                      ? ` · ${selectedTeamPlayerName} ${selectedTeamPlayerOverall} OVR`
-                      : ""}
-                  </span>
-                </div>
-                <div className="team-board-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    disabled={!match || generatedTeams.length === 0}
-                    onClick={handleExportTeamsText}
-                  >
-                    Exportar texto
-                  </button>
-                  {canManageMatch && (
+              <div className="team-board glass-card">
+                <div className="ledger-heading">
+                  <div>
+                    <h3>Times sugeridos</h3>
+                    <span className="muted">
+                      Gap médio {averageOverallGap?.toFixed(2) ?? "0.00"}
+                      {selectedTeamPlayerOverall != null
+                        ? ` · ${selectedTeamPlayerName} ${selectedTeamPlayerOverall} OVR`
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="team-board-actions">
                     <button
                       type="button"
                       className="ghost-button"
-                      disabled={
-                        !canClearGeneratedTeams ||
-                        isGeneratingTeams ||
-                        isClearingTeams ||
-                        isSwappingTeamPlayers
-                      }
-                      onClick={() => void onClearGeneratedTeams()}
+                      disabled={!match || generatedTeams.length === 0}
+                      onClick={handleExportTeamsText}
                     >
-                      {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
+                      Exportar texto
                     </button>
+                    {canManageMatch && (
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={
+                          !canClearGeneratedTeams ||
+                          isGeneratingTeams ||
+                          isClearingTeams ||
+                          isSwappingTeamPlayers
+                        }
+                        onClick={() => void onClearGeneratedTeams()}
+                      >
+                        {isClearingTeams ? "Desfazendo..." : "Desfazer times"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="team-rows">
+                  {generatedTeams.length === 0 ? (
+                    <p className="empty-state">Gere os times para ver uma sugestão balanceada.</p>
+                  ) : (
+                    generatedTeams.map((team, teamIndex) => (
+                      <article key={team.name} className="team-card">
+                        <header>
+                          <h4>{team.name}</h4>
+                          <p className="muted">{team.players.length} jogadores</p>
+                        </header>
+                        <ul>
+                          {team.players.map((player) => (
+                            <li key={player.id}>
+                              <button
+                                type="button"
+                                className={getTeamPlayerButtonClass(
+                                  player.id,
+                                  teamIndex,
+                                  player.ratings.overall,
+                                )}
+                                disabled={isSwappingTeamPlayers}
+                                onClick={() => void handleTeamPlayerClick(player.id)}
+                                aria-pressed={selectedTeamPlayer?.player.id === player.id}
+                                aria-label={`${player.displayName}, ${player.ratings.overall} overall`}
+                              >
+                                <span>{player.displayName}</span>
+                                <strong>{player.ratings.overall} OVR</strong>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                        <footer>
+                          <span>Total {team.totalOverall}</span>
+                          <span>Média {team.averageOverall.toFixed(1)}</span>
+                        </footer>
+                      </article>
+                    ))
                   )}
                 </div>
               </div>
-              <div className="team-rows">
-                {generatedTeams.length === 0 ? (
-                  <p className="empty-state">Gere os times para ver uma sugestão balanceada.</p>
-                ) : (
-                  generatedTeams.map((team, teamIndex) => (
-                    <article key={team.name} className="team-card">
-                      <header>
-                        <h4>{team.name}</h4>
-                        <p className="muted">{team.players.length} jogadores</p>
-                      </header>
-                      <ul>
-                        {team.players.map((player) => (
-                          <li key={player.id}>
-                            <button
-                              type="button"
-                              className={getTeamPlayerButtonClass(
-                                player.id,
-                                teamIndex,
-                                player.ratings.overall,
-                              )}
-                              disabled={isSwappingTeamPlayers}
-                              onClick={() => void handleTeamPlayerClick(player.id)}
-                              aria-pressed={selectedTeamPlayer?.player.id === player.id}
-                              aria-label={`${player.displayName}, ${player.ratings.overall} overall`}
-                            >
-                              <span>{player.displayName}</span>
-                              <strong>{player.ratings.overall} OVR</strong>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                      <footer>
-                        <span>Total {team.totalOverall}</span>
-                        <span>Média {team.averageOverall.toFixed(1)}</span>
-                      </footer>
-                    </article>
-                  ))
-                )}
-              </div>
-            </div>
             </div>
 
             <div className="pre-match-rail">
-            {canEditAttendance && match && (
-              <div className="pre-match-grid">
-                <div className="glass-card attendance-card">
-                  <div className="ledger-heading">
-                    <h3>Confirmar mensalista</h3>
-                    <span className="muted">{availablePlayers.length} disponíveis</span>
-                  </div>
-                  <div className="inline-form">
-                    <select
-                      className="input-field"
-                      value={selectedPlayerId}
-                      onChange={(event) => setSelectedPlayerId(event.target.value)}
-                    >
-                      <option value="">Selecione um jogador</option>
-                      {availablePlayers.map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.fullName} · {player.ratings.overall} OVR
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      disabled={!selectedPlayerId || isSubmittingAttendance}
-                      onClick={() => void handleConfirmPlayer()}
-                    >
-                      Confirmar presença
-                    </button>
-                  </div>
-                </div>
-
-                <form className="glass-card attendance-card" onSubmit={handleAddGuest}>
-                  <div className="ledger-heading">
-                    <h3>Adicionar convidado</h3>
-                    <span className="muted">Snapshot próprio</span>
-                  </div>
-                  <div className="form-grid compact-grid">
-                    <label className="form-span-2">
-                      Nome
-                      <input
-                        className="input-field"
-                        value={guestValues.displayName}
-                        onChange={handleGuestField("displayName")}
-                        required
-                      />
-                    </label>
-                    <label className="form-span-2">
-                      Overall
-                      <input
-                        className="input-field"
-                        type="number"
-                        min="0"
-                        max="99"
-                        value={guestValues.ratings.overall}
-                        onChange={handleGuestRating("overall")}
-                      />
-                    </label>
-                    <label className="form-span-2">
-                      Responsável pela cobrança
+              {canEditAttendance && match && (
+                <div className="pre-match-grid">
+                  <div className="glass-card attendance-card">
+                    <div className="ledger-heading">
+                      <h3>Confirmar mensalista</h3>
+                      <span className="muted">{availablePlayers.length} disponíveis</span>
+                    </div>
+                    <div className="inline-form">
                       <select
                         className="input-field"
-                        value={guestValues.invitedById ?? ""}
-                        onChange={handleGuestField("invitedById")}
-                        required
+                        value={selectedPlayerId}
+                        onChange={(event) => setSelectedPlayerId(event.target.value)}
                       >
-                        <option value="">Selecione um jogador do elenco</option>
-                        {responsiblePlayerOptions.map((player) => (
+                        <option value="">Selecione um jogador</option>
+                        {availablePlayers.map((player) => (
                           <option key={player.id} value={player.id}>
-                            {player.fullName}
+                            {player.fullName} · {player.ratings.overall} OVR
                           </option>
                         ))}
                       </select>
-                    </label>
-                    <label className="form-span-2">
-                      Observações
-                      <textarea
-                        className="input-field textarea-field"
-                        value={guestValues.notes ?? ""}
-                        onChange={handleGuestField("notes")}
-                      />
-                    </label>
-                  </div>
-                  <div className="section-actions">
-                    <button
-                      type="submit"
-                      className="primary-button"
-                      disabled={isSubmittingAttendance || !canSubmitGuest}
-                    >
-                      {isSubmittingAttendance ? "Salvando..." : "Adicionar convidado"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            <aside className="pre-match-aside">
-              <div className="glass-card attendance-card">
-                <div className="ledger-heading">
-                  <h3>Histórico de peladas</h3>
-                  <span className="muted">{matchHistory.length} registradas</span>
-                </div>
-                {matchHistory.length === 0 ? (
-                  <p className="empty-state">Sem histórico por enquanto.</p>
-                ) : (
-                  <>
-                    <div className="match-history-list">
-                      {paginatedMatchHistory.map((entry) => (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          className={`match-history-item ${match?.id === entry.id ? "active" : ""}`}
-                          onClick={() => onSelectMatch(entry.id)}
-                        >
-                          <div className="match-history-info">
-                            <strong>{formatDateTime(entry.scheduledAt)}</strong>
-                            <small className="muted">{entry.location || "Local a definir"}</small>
-                            <small className="muted">{entry.expectedTeamCount} times</small>
-                          </div>
-                          <span className={`status-chip ${entry.status.toLowerCase()}`}>
-                            {matchStatusLabels[entry.status]}
-                          </span>
-                        </button>
-                      ))}
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={!selectedPlayerId || isSubmittingAttendance}
+                        onClick={() => void handleConfirmPlayer()}
+                      >
+                        Confirmar presença
+                      </button>
                     </div>
-                    {matchHistoryPageCount > 1 && (
-                      <div className="rating-log-pagination">
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          disabled={currentMatchHistoryPage <= 1}
-                          onClick={() => setMatchHistoryPage((page) => Math.max(1, page - 1))}
+                  </div>
+
+                  <form className="glass-card attendance-card" onSubmit={handleAddGuest}>
+                    <div className="ledger-heading">
+                      <h3>Adicionar convidado</h3>
+                      <span className="muted">Snapshot próprio</span>
+                    </div>
+                    <div className="form-grid compact-grid">
+                      <label className="form-span-2">
+                        Nome
+                        <input
+                          className="input-field"
+                          value={guestValues.displayName}
+                          onChange={handleGuestField("displayName")}
+                          required
+                        />
+                      </label>
+                      <label className="form-span-2">
+                        Overall
+                        <input
+                          className="input-field"
+                          type="number"
+                          min="0"
+                          max="99"
+                          value={guestValues.ratings.overall}
+                          onChange={handleGuestRating("overall")}
+                        />
+                      </label>
+                      <label className="form-span-2">
+                        Responsável pela cobrança
+                        <select
+                          className="input-field"
+                          value={guestValues.invitedById ?? ""}
+                          onChange={handleGuestField("invitedById")}
+                          required
                         >
-                          ‹
-                        </button>
-                        <span>
-                          Página {currentMatchHistoryPage} de {matchHistoryPageCount}
-                        </span>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          disabled={currentMatchHistoryPage >= matchHistoryPageCount}
-                          onClick={() =>
-                            setMatchHistoryPage((page) => Math.min(matchHistoryPageCount, page + 1))
-                          }
-                        >
-                          ›
-                        </button>
+                          <option value="">Selecione um jogador do elenco</option>
+                          {responsiblePlayerOptions.map((player) => (
+                            <option key={player.id} value={player.id}>
+                              {player.fullName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="form-span-2">
+                        Observações
+                        <textarea
+                          className="input-field textarea-field"
+                          value={guestValues.notes ?? ""}
+                          onChange={handleGuestField("notes")}
+                        />
+                      </label>
+                    </div>
+                    <div className="section-actions">
+                      <button
+                        type="submit"
+                        className="primary-button"
+                        disabled={isSubmittingAttendance || !canSubmitGuest}
+                      >
+                        {isSubmittingAttendance ? "Salvando..." : "Adicionar convidado"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <aside className="pre-match-aside">
+                <div className="glass-card attendance-card">
+                  <div className="ledger-heading">
+                    <h3>Histórico de peladas</h3>
+                    <span className="muted">{matchHistory.length} registradas</span>
+                  </div>
+                  {matchHistory.length === 0 ? (
+                    <p className="empty-state">Sem histórico por enquanto.</p>
+                  ) : (
+                    <>
+                      <div className="match-history-list">
+                        {paginatedMatchHistory.map((entry) => (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            className={`match-history-item ${match?.id === entry.id ? "active" : ""}`}
+                            onClick={() => onSelectMatch(entry.id)}
+                          >
+                            <div className="match-history-info">
+                              <strong>{formatDateTime(entry.scheduledAt)}</strong>
+                              <small className="muted">{entry.location || "Local a definir"}</small>
+                              <small className="muted">{entry.expectedTeamCount} times</small>
+                            </div>
+                            <span className={`status-chip ${entry.status.toLowerCase()}`}>
+                              {matchStatusLabels[entry.status]}
+                            </span>
+                          </button>
+                        ))}
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </aside>
+                      {matchHistoryPageCount > 1 && (
+                        <div className="rating-log-pagination">
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={currentMatchHistoryPage <= 1}
+                            onClick={() => setMatchHistoryPage((page) => Math.max(1, page - 1))}
+                          >
+                            ‹
+                          </button>
+                          <span>
+                            Página {currentMatchHistoryPage} de {matchHistoryPageCount}
+                          </span>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={currentMatchHistoryPage >= matchHistoryPageCount}
+                            onClick={() =>
+                              setMatchHistoryPage((page) =>
+                                Math.min(matchHistoryPageCount, page + 1),
+                              )
+                            }
+                          >
+                            ›
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </aside>
             </div>
           </div>
 
@@ -1731,9 +1759,7 @@ export function PreMatchPage({
                     <div>
                       <strong>{entry.displayName}</strong>
                       <p className="muted">Taxa de convidado da rodada</p>
-                      <p className="muted">
-                        Responsável: {entry.invitedByName ?? "Nao informado"}
-                      </p>
+                      <p className="muted">Responsável: {entry.invitedByName ?? "Nao informado"}</p>
                     </div>
                     <div className="guest-fee-actions">
                       <strong>{currencyFormatter.format(entry.guestFeeOutstanding)}</strong>
@@ -1763,373 +1789,382 @@ export function PreMatchPage({
               </div>
             </div>
           )}
-
         </>
       ) : (
         <>
-          {shouldShowOverallHistory && (
-            <OverallHistoryPanel overallHistory={overallHistory} />
-          )}
+          {shouldShowOverallHistory && <OverallHistoryPanel overallHistory={overallHistory} />}
 
           <div className="rating-arena glass-card">
-          <div className="ledger-heading rating-arena-heading">
-            <div>
-              <p className="eyebrow">Pós-jogo</p>
-              <h3>Notas da rodada</h3>
-              <small className="muted">
-                {ratingState?.ratingsFinalizedAt
-                  ? `Finalizadas em ${formatDateTime(ratingState.ratingsFinalizedAt)}`
-                  : ratingState?.windowClosesAt
-                    ? `Janela aberta até ${formatDateTime(ratingState.windowClosesAt)}`
-                    : "A votação abre por 24 horas após o arquivamento da pelada."}
-              </small>
-              {match && <small className="muted">{ratingModeHints[match.ratingMode]}</small>}
-            </div>
-            <div className="rating-arena-actions">
-              <div className="rating-arena-score">
-                <span>
-                  {completedRatingCount + skippedRatingCount}/{ratingItems.length}
-                </span>
-                <small>cards resolvidos</small>
+            <div className="ledger-heading rating-arena-heading">
+              <div>
+                <p className="eyebrow">Pós-jogo</p>
+                <h3>Notas da rodada</h3>
+                <small className="muted">
+                  {ratingState?.ratingsFinalizedAt
+                    ? `Finalizadas em ${formatDateTime(ratingState.ratingsFinalizedAt)}`
+                    : ratingState?.windowClosesAt
+                      ? `Janela aberta até ${formatDateTime(ratingState.windowClosesAt)}`
+                      : "A votação abre por 24 horas após o arquivamento da pelada."}
+                </small>
+                {match && <small className="muted">{ratingModeHints[match.ratingMode]}</small>}
               </div>
-              {canManageMatch && (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={!canExportOverallImage || isRecalculatingRatings}
-                  onClick={handleExportOverallImage}
-                >
-                  Exportar imagem
-                </button>
-              )}
-              {canManageMatch && (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={!canFinalizeRatings || isFinalizingRatings || isRecalculatingRatings}
-                  onClick={() => void handleFinalizeRatings()}
-                >
-                  {isFinalizingRatings ? "Finalizando..." : "Finalizar janela"}
-                </button>
-              )}
-              {canManageMatch && ratingState?.ratingsFinalizedAt && (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={!canRecalculateRatings || isRecalculatingRatings || isFinalizingRatings}
-                  onClick={() => void handleRecalculateRatings()}
-                >
-                  {isRecalculatingRatings ? "Recalculando..." : "Recalcular overalls"}
-                </button>
-              )}
+              <div className="rating-arena-actions">
+                <div className="rating-arena-score">
+                  <span>
+                    {completedRatingCount + skippedRatingCount}/{ratingItems.length}
+                  </span>
+                  <small>cards resolvidos</small>
+                </div>
+                {canManageMatch && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={!canExportOverallImage || isRecalculatingRatings}
+                    onClick={handleExportOverallImage}
+                  >
+                    Exportar imagem
+                  </button>
+                )}
+                {canManageMatch && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={!canFinalizeRatings || isFinalizingRatings || isRecalculatingRatings}
+                    onClick={() => void handleFinalizeRatings()}
+                  >
+                    {isFinalizingRatings ? "Finalizando..." : "Finalizar janela"}
+                  </button>
+                )}
+                {canManageMatch && ratingState?.ratingsFinalizedAt && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={
+                      !canRecalculateRatings || isRecalculatingRatings || isFinalizingRatings
+                    }
+                    onClick={() => void handleRecalculateRatings()}
+                  >
+                    {isRecalculatingRatings ? "Recalculando..." : "Recalcular overalls"}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {!match ? (
-            <p className="empty-state">Selecione uma pelada para ver as notas.</p>
-          ) : !ratingState ? (
-            <p className="empty-state">Notas indisponíveis para esta pelada.</p>
-          ) : ratingItems.length === 0 && ratingLogEntries.length === 0 ? (
-            <p className="empty-state">
-              {ratingState.ratingsFinalizedAt && overallSummary.length > 0
-                ? canManageMatch
-                  ? "Janela finalizada. Exporte a imagem para compartilhar os overalls atualizados."
-                  : "Janela finalizada. Os overalls da rodada ja foram atualizados."
-                : ratingState.lockedReason || "A tela de notas está vazia para esta pelada."}
-            </p>
-          ) : (
-            <div className={`rating-workspace ${ratingItems.length === 0 ? "log-only" : ""}`}>
-              {ratingItems.length > 0 && (
-                <div className="rating-vote-panel">
-                  <div className="rating-carousel-shell">
-                    <button
-                      type="button"
-                      className="rating-carousel-control"
-                      disabled={ratingItems.length < 2}
-                      onClick={() => handleRatingCardStep(-1)}
-                      aria-label="Jogador anterior"
-                    >
-                      ‹
-                    </button>
-
-                    {activeRatingItem && (
-                      <article
-                        className={`rating-player-card rating-carousel-card ${
-                          activeRatingScore ? "rated" : ""
-                        } ${isActiveRatingSkipped ? "skipped" : ""}`}
-                      >
-                        <header>
-                          <div>
-                            <span className="rating-card-kicker">Jogador</span>
-                            <h4>{activeRatingItem.displayName}</h4>
-                          </div>
-                          <div
-                            className={`rating-overall-badge ${getOverallTierClass(
-                              activeRatingItem.currentOverall,
-                            )}`}
-                            aria-label={`${activeRatingItem.currentOverall} overall`}
-                          >
-                            <strong>{activeRatingItem.currentOverall}</strong>
-                            <span>OVR</span>
-                          </div>
-                        </header>
-
-                        <div className="rating-impact-panel" aria-live="polite">
-                          <div className="rating-selected-score">
-                            <span>{isActiveRatingSkipped ? "Pulado" : "Nota"}</span>
-                            <strong>
-                              {isActiveRatingSkipped
-                                ? "--"
-                                : activeRatingScore
-                                  ? activeRatingScore.toFixed(1)
-                                  : "-"}
-                            </strong>
-                          </div>
-                          <div className="rating-score-summary">
-                            <div className="rating-score-meter" aria-hidden="true">
-                              <span style={{ width: `${activeRatingMeterPercent}%` }} />
-                            </div>
-                            <div className="rating-score-range">
-                              <span>1.0</span>
-                              <span>10.0</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {ratingState.canRate ? (
-                          <div className="rating-score-grid">
-                            <label className="rating-slider-field">
-                              <span className="sr-only">Nota de {activeRatingItem.displayName}</span>
-                              <input
-                                className="rating-score-slider"
-                                type="range"
-                                min="1"
-                                max="10"
-                                step="0.1"
-                                value={activeRatingSliderValue}
-                                onChange={(event) => {
-                                  const nextScore = Number(Number(event.target.value).toFixed(1));
-                                  handleRatingScoreChange(activeRatingItem.attendanceId, nextScore);
-                                }}
-                              />
-                            </label>
-                            <div className="rating-quick-scores" aria-label="Notas rapidas">
-                              {quickRatingScores.map((score) => (
-                                <button
-                                  key={score}
-                                  type="button"
-                                  className={`rating-score-button ${
-                                    activeRatingScore === score ? "active" : ""
-                                  }`}
-                                  onClick={() =>
-                                    handleRatingScoreChange(activeRatingItem.attendanceId, score)
-                                  }
-                                >
-                                  {score}
-                                </button>
-                              ))}
-                            </div>
-                            <button
-                              type="button"
-                              className={`rating-skip-button ${isActiveRatingSkipped ? "active" : ""}`}
-                              onClick={handleToggleSkipRating}
-                              aria-pressed={isActiveRatingSkipped}
-                            >
-                              {isActiveRatingSkipped
-                                ? "Voltar a avaliar este jogador"
-                                : "Pular este jogador"}
-                            </button>
-                            {isActiveRatingSkipped && (
-                              <p className="rating-skip-hint">
-                                Você optou por não votar em {activeRatingItem.displayName}. Nenhuma
-                                nota sua será contabilizada para ele nesta pelada.
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="empty-state">
-                            {ratingState.lockedReason || "Você pode acompanhar o log, mas não votar nesta rodada."}
-                          </p>
-                        )}
-
-                        <footer>
-                          <span>
-                            {ratingCardIndex + 1}/{ratingItems.length}
-                          </span>
-                          <span>{activeRatingItem.ratingCount} voto(s)</span>
-                          <strong>
-                            {activeRatingItem.averageScore
-                              ? `${activeRatingItem.averageScore.toFixed(1)} media`
-                              : "Sem media"}
-                          </strong>
-                        </footer>
-                      </article>
-                    )}
-
-                    <button
-                      type="button"
-                      className="rating-carousel-control"
-                      disabled={ratingItems.length < 2}
-                      onClick={() => handleRatingCardStep(1)}
-                      aria-label="Próximo jogador"
-                    >
-                      ›
-                    </button>
-                  </div>
-
-                  {ratingItems.length > 1 && (
-                    <div className="rating-carousel-dots" aria-label="Jogadores para avaliar">
-                      {ratingItems.map((item, index) => (
-                        <button
-                          key={item.attendanceId}
-                          type="button"
-                          className={[
-                            index === ratingCardIndex ? "active" : "",
-                            skippedRatings.includes(item.attendanceId)
-                              ? "skipped"
-                              : ratingDraft[item.attendanceId]
-                                ? "rated"
-                                : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          onClick={() => setRatingCardIndex(index)}
-                          aria-label={`Ir para ${item.displayName}${
-                            skippedRatings.includes(item.attendanceId) ? " (pulado)" : ""
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {ratingState.canRate && (
-                    <div className="rating-submit-row">
-                      <span className="rating-submit-progress">
-                        {completedRatingCount} avaliado(s)
-                        {skippedRatingCount > 0 ? ` · ${skippedRatingCount} pulado(s)` : ""}
-                        {pendingRatingCount > 0 ? ` · ${pendingRatingCount} pendente(s)` : ""}
-                      </span>
+            {!match ? (
+              <p className="empty-state">Selecione uma pelada para ver as notas.</p>
+            ) : !ratingState ? (
+              <p className="empty-state">Notas indisponíveis para esta pelada.</p>
+            ) : ratingItems.length === 0 && ratingLogEntries.length === 0 ? (
+              <p className="empty-state">
+                {ratingState.ratingsFinalizedAt && overallSummary.length > 0
+                  ? canManageMatch
+                    ? "Janela finalizada. Exporte a imagem para compartilhar os overalls atualizados."
+                    : "Janela finalizada. Os overalls da rodada ja foram atualizados."
+                  : ratingState.lockedReason || "A tela de notas está vazia para esta pelada."}
+              </p>
+            ) : (
+              <div className={`rating-workspace ${ratingItems.length === 0 ? "log-only" : ""}`}>
+                {ratingItems.length > 0 && (
+                  <div className="rating-vote-panel">
+                    <div className="rating-carousel-shell">
                       <button
                         type="button"
-                        className="primary-button rating-submit-button"
-                        disabled={
-                          isSubmittingRatings ||
-                          ratingItems.length === 0 ||
-                          pendingRatingCount > 0 ||
-                          completedRatingCount === 0
-                        }
-                        onClick={() => void handleRatingSubmit()}
+                        className="rating-carousel-control"
+                        disabled={ratingItems.length < 2}
+                        onClick={() => handleRatingCardStep(-1)}
+                        aria-label="Jogador anterior"
                       >
-                        {isSubmittingRatings
-                          ? "Enviando notas..."
-                          : ratingState.hasSubmitted
-                            ? "Atualizar notas"
-                            : "Enviar notas"}
+                        ‹
+                      </button>
+
+                      {activeRatingItem && (
+                        <article
+                          className={`rating-player-card rating-carousel-card ${
+                            activeRatingScore ? "rated" : ""
+                          } ${isActiveRatingSkipped ? "skipped" : ""}`}
+                        >
+                          <header>
+                            <div>
+                              <span className="rating-card-kicker">Jogador</span>
+                              <h4>{activeRatingItem.displayName}</h4>
+                            </div>
+                            <div
+                              className={`rating-overall-badge ${getOverallTierClass(
+                                activeRatingItem.currentOverall,
+                              )}`}
+                              aria-label={`${activeRatingItem.currentOverall} overall`}
+                            >
+                              <strong>{activeRatingItem.currentOverall}</strong>
+                              <span>OVR</span>
+                            </div>
+                          </header>
+
+                          <div className="rating-impact-panel" aria-live="polite">
+                            <div className="rating-selected-score">
+                              <span>{isActiveRatingSkipped ? "Pulado" : "Nota"}</span>
+                              <strong>
+                                {isActiveRatingSkipped
+                                  ? "--"
+                                  : activeRatingScore
+                                    ? activeRatingScore.toFixed(1)
+                                    : "-"}
+                              </strong>
+                            </div>
+                            <div className="rating-score-summary">
+                              <div className="rating-score-meter" aria-hidden="true">
+                                <span style={{ width: `${activeRatingMeterPercent}%` }} />
+                              </div>
+                              <div className="rating-score-range">
+                                <span>1.0</span>
+                                <span>10.0</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {ratingState.canRate ? (
+                            <div className="rating-score-grid">
+                              <label className="rating-slider-field">
+                                <span className="sr-only">
+                                  Nota de {activeRatingItem.displayName}
+                                </span>
+                                <input
+                                  className="rating-score-slider"
+                                  type="range"
+                                  min="1"
+                                  max="10"
+                                  step="0.1"
+                                  value={activeRatingSliderValue}
+                                  onChange={(event) => {
+                                    const nextScore = Number(Number(event.target.value).toFixed(1));
+                                    handleRatingScoreChange(
+                                      activeRatingItem.attendanceId,
+                                      nextScore,
+                                    );
+                                  }}
+                                />
+                              </label>
+                              <div className="rating-quick-scores" aria-label="Notas rapidas">
+                                {quickRatingScores.map((score) => (
+                                  <button
+                                    key={score}
+                                    type="button"
+                                    className={`rating-score-button ${
+                                      activeRatingScore === score ? "active" : ""
+                                    }`}
+                                    onClick={() =>
+                                      handleRatingScoreChange(activeRatingItem.attendanceId, score)
+                                    }
+                                  >
+                                    {score}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                className={`rating-skip-button ${isActiveRatingSkipped ? "active" : ""}`}
+                                onClick={handleToggleSkipRating}
+                                aria-pressed={isActiveRatingSkipped}
+                              >
+                                {isActiveRatingSkipped
+                                  ? "Voltar a avaliar este jogador"
+                                  : "Pular este jogador"}
+                              </button>
+                              {isActiveRatingSkipped && (
+                                <p className="rating-skip-hint">
+                                  Você optou por não votar em {activeRatingItem.displayName}.
+                                  Nenhuma nota sua será contabilizada para ele nesta pelada.
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="empty-state">
+                              {ratingState.lockedReason ||
+                                "Você pode acompanhar o log, mas não votar nesta rodada."}
+                            </p>
+                          )}
+
+                          <footer>
+                            <span>
+                              {ratingCardIndex + 1}/{ratingItems.length}
+                            </span>
+                            <span>{activeRatingItem.ratingCount} voto(s)</span>
+                            <strong>
+                              {activeRatingItem.averageScore
+                                ? `${activeRatingItem.averageScore.toFixed(1)} media`
+                                : "Sem media"}
+                            </strong>
+                          </footer>
+                        </article>
+                      )}
+
+                      <button
+                        type="button"
+                        className="rating-carousel-control"
+                        disabled={ratingItems.length < 2}
+                        onClick={() => handleRatingCardStep(1)}
+                        aria-label="Próximo jogador"
+                      >
+                        ›
                       </button>
                     </div>
-                  )}
-                </div>
-              )}
 
-              <div className="rating-log-panel">
-                <div className="ledger-heading">
-                  <h3>Log de votos</h3>
-                  <span className="muted">
-                    {filteredRatingLog.length}/{ratingLogEntries.length} registro(s)
-                  </span>
-                </div>
-                {ratingLogEntries.length > 0 && (
-                  <div className="rating-log-filters">
-                    <label>
-                      <span>Quem votou</span>
-                      <select
-                        value={ratingLogRaterFilter}
-                        onChange={(event) => setRatingLogRaterFilter(event.target.value)}
-                      >
-                        <option value="">Todos</option>
-                        {ratingLogRaterOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
+                    {ratingItems.length > 1 && (
+                      <div className="rating-carousel-dots" aria-label="Jogadores para avaliar">
+                        {ratingItems.map((item, index) => (
+                          <button
+                            key={item.attendanceId}
+                            type="button"
+                            className={[
+                              index === ratingCardIndex ? "active" : "",
+                              skippedRatings.includes(item.attendanceId)
+                                ? "skipped"
+                                : ratingDraft[item.attendanceId]
+                                  ? "rated"
+                                  : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            onClick={() => setRatingCardIndex(index)}
+                            aria-label={`Ir para ${item.displayName}${
+                              skippedRatings.includes(item.attendanceId) ? " (pulado)" : ""
+                            }`}
+                          />
                         ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Quem recebeu</span>
-                      <select
-                        value={ratingLogRatedFilter}
-                        onChange={(event) => setRatingLogRatedFilter(event.target.value)}
-                      >
-                        <option value="">Todos</option>
-                        {ratingLogRatedOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Data do voto</span>
-                      <input
-                        type="date"
-                        value={ratingLogDateFilter}
-                        onChange={(event) => setRatingLogDateFilter(event.target.value)}
-                      />
-                    </label>
-                  </div>
-                )}
-                {ratingLogEntries.length === 0 ? (
-                  <p className="empty-state">Nenhum voto registrado ainda.</p>
-                ) : filteredRatingLog.length === 0 ? (
-                  <p className="empty-state">Nenhum voto encontrado para os filtros selecionados.</p>
-                ) : (
-                  <>
-                    <div className="rating-log-list">
-                      {paginatedRatingLog.map((entry) => (
-                        <article
-                          key={`${entry.raterUserId ?? "legacy"}-${entry.ratedAttendanceId}-${entry.updatedAt}`}
-                          className="rating-log-row"
-                        >
-                          <div>
-                            <strong>{entry.raterDisplayName}</strong>
-                            <span className="muted">votou em {entry.ratedDisplayName}</span>
-                          </div>
-                          <div className="rating-log-score">
-                            <strong>{formatRatingScore(entry.score)}</strong>
-                            <span>{formatDateTime(entry.updatedAt)}</span>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                    {ratingLogPageCount > 1 && (
-                      <div className="rating-log-pagination">
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          disabled={currentRatingLogPage <= 1}
-                          onClick={() => setRatingLogPage((page) => Math.max(1, page - 1))}
-                        >
-                          ‹
-                        </button>
-                        <span>
-                          Página {currentRatingLogPage} de {ratingLogPageCount}
+                      </div>
+                    )}
+
+                    {ratingState.canRate && (
+                      <div className="rating-submit-row">
+                        <span className="rating-submit-progress">
+                          {completedRatingCount} avaliado(s)
+                          {skippedRatingCount > 0 ? ` · ${skippedRatingCount} pulado(s)` : ""}
+                          {pendingRatingCount > 0 ? ` · ${pendingRatingCount} pendente(s)` : ""}
                         </span>
                         <button
                           type="button"
-                          className="secondary-button"
-                          disabled={currentRatingLogPage >= ratingLogPageCount}
-                          onClick={() => setRatingLogPage((page) => Math.min(ratingLogPageCount, page + 1))}
+                          className="primary-button rating-submit-button"
+                          disabled={
+                            isSubmittingRatings ||
+                            ratingItems.length === 0 ||
+                            pendingRatingCount > 0 ||
+                            completedRatingCount === 0
+                          }
+                          onClick={() => void handleRatingSubmit()}
                         >
-                          ›
+                          {isSubmittingRatings
+                            ? "Enviando notas..."
+                            : ratingState.hasSubmitted
+                              ? "Atualizar notas"
+                              : "Enviar notas"}
                         </button>
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
+
+                <div className="rating-log-panel">
+                  <div className="ledger-heading">
+                    <h3>Log de votos</h3>
+                    <span className="muted">
+                      {filteredRatingLog.length}/{ratingLogEntries.length} registro(s)
+                    </span>
+                  </div>
+                  {ratingLogEntries.length > 0 && (
+                    <div className="rating-log-filters">
+                      <label>
+                        <span>Quem votou</span>
+                        <select
+                          value={ratingLogRaterFilter}
+                          onChange={(event) => setRatingLogRaterFilter(event.target.value)}
+                        >
+                          <option value="">Todos</option>
+                          {ratingLogRaterOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Quem recebeu</span>
+                        <select
+                          value={ratingLogRatedFilter}
+                          onChange={(event) => setRatingLogRatedFilter(event.target.value)}
+                        >
+                          <option value="">Todos</option>
+                          {ratingLogRatedOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Data do voto</span>
+                        <input
+                          type="date"
+                          value={ratingLogDateFilter}
+                          onChange={(event) => setRatingLogDateFilter(event.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
+                  {ratingLogEntries.length === 0 ? (
+                    <p className="empty-state">Nenhum voto registrado ainda.</p>
+                  ) : filteredRatingLog.length === 0 ? (
+                    <p className="empty-state">
+                      Nenhum voto encontrado para os filtros selecionados.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="rating-log-list">
+                        {paginatedRatingLog.map((entry) => (
+                          <article
+                            key={`${entry.raterUserId ?? "legacy"}-${entry.ratedAttendanceId}-${entry.updatedAt}`}
+                            className="rating-log-row"
+                          >
+                            <div>
+                              <strong>{entry.raterDisplayName}</strong>
+                              <span className="muted">votou em {entry.ratedDisplayName}</span>
+                            </div>
+                            <div className="rating-log-score">
+                              <strong>{formatRatingScore(entry.score)}</strong>
+                              <span>{formatDateTime(entry.updatedAt)}</span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                      {ratingLogPageCount > 1 && (
+                        <div className="rating-log-pagination">
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={currentRatingLogPage <= 1}
+                            onClick={() => setRatingLogPage((page) => Math.max(1, page - 1))}
+                          >
+                            ‹
+                          </button>
+                          <span>
+                            Página {currentRatingLogPage} de {ratingLogPageCount}
+                          </span>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={currentRatingLogPage >= ratingLogPageCount}
+                            onClick={() =>
+                              setRatingLogPage((page) => Math.min(ratingLogPageCount, page + 1))
+                            }
+                          >
+                            ›
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-            </div>
+            )}
+          </div>
         </>
       )}
 

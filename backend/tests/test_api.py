@@ -302,11 +302,15 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(Decimal(summary_response.data["pending_total"]), Decimal("59.00"))
         self.assertEqual(guest_fee_due_response.status_code, 200)
         self.assertEqual([item["id"] for item in guest_fee_due_response.data], [str(guest.id)])
-        guest_payload = next(item for item in attendance_response.data if item["id"] == str(guest.id))
+        guest_payload = next(
+            item for item in attendance_response.data if item["id"] == str(guest.id)
+        )
         self.assertTrue(guest_payload["guest_fee_is_due"])
         self.assertEqual(Decimal(guest_payload["guest_fee_outstanding"]), Decimal("14.00"))
         self.assertEqual(paid_response.status_code, 200)
-        self.assertEqual(paid_response.data["guest_fee_status"], MatchAttendance.GuestFeeStatus.PAID)
+        self.assertEqual(
+            paid_response.data["guest_fee_status"], MatchAttendance.GuestFeeStatus.PAID
+        )
         self.assertFalse(paid_response.data["guest_fee_is_due"])
         self.assertEqual(Decimal(next_summary_response.data["pending_total"]), Decimal("45.00"))
         self.assertEqual(next_guest_fee_due_response.data, [])
@@ -341,7 +345,9 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(summary_response.status_code, 200)
         self.assertEqual(Decimal(summary_response.data["pending_total"]), Decimal("59.00"))
         self.assertEqual(waive_response.status_code, 200)
-        self.assertEqual(waive_response.data["guest_fee_status"], MatchAttendance.GuestFeeStatus.WAIVED)
+        self.assertEqual(
+            waive_response.data["guest_fee_status"], MatchAttendance.GuestFeeStatus.WAIVED
+        )
         self.assertFalse(waive_response.data["guest_fee_is_due"])
         self.assertEqual(Decimal(next_summary_response.data["pending_total"]), Decimal("45.00"))
         self.assertEqual(next_guest_fee_due_response.data, [])
@@ -371,15 +377,15 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["teams"]), 2)
         assigned_ids = [
-            player["id"]
-            for team in response.data["teams"]
-            for player in team["players"]
+            player["id"] for team in response.data["teams"] for player in team["players"]
         ]
         self.assertEqual(len(assigned_ids), len(set(assigned_ids)))
         self.match.refresh_from_db()
         self.assertIsNotNone(self.match.teams_generated_at)
         self.assertTrue(
-            MatchAttendance.objects.filter(match=self.match, assigned_team_number__isnull=False).exists()
+            MatchAttendance.objects.filter(
+                match=self.match, assigned_team_number__isnull=False
+            ).exists()
         )
         stale_attendance.refresh_from_db()
         self.assertIsNone(stale_attendance.assigned_team_number)
@@ -401,7 +407,9 @@ class ApiFlowTests(APITestCase):
         self.match.refresh_from_db()
         self.assertIsNone(self.match.teams_generated_at)
         self.assertFalse(
-            MatchAttendance.objects.filter(match=self.match, assigned_team_number__isnull=False).exists()
+            MatchAttendance.objects.filter(
+                match=self.match, assigned_team_number__isnull=False
+            ).exists()
         )
         self.assertFalse(
             MatchAttendance.objects.filter(match=self.match).exclude(assigned_team_name="").exists()
@@ -414,8 +422,9 @@ class ApiFlowTests(APITestCase):
             format="json",
         )
         attendances = list(
-            MatchAttendance.objects.filter(match=self.match)
-            .order_by("assigned_team_number", "display_name")
+            MatchAttendance.objects.filter(match=self.match).order_by(
+                "assigned_team_number", "display_name"
+            )
         )
         source_attendance = attendances[0]
         target_attendance = next(
@@ -444,10 +453,7 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(source_attendance.assigned_team_name, target_team_name)
         self.assertEqual(target_attendance.assigned_team_number, source_team_number)
         self.assertEqual(target_attendance.assigned_team_name, source_team_name)
-        response_assignments = {
-            item["id"]: item["assigned_team_number"]
-            for item in response.data
-        }
+        response_assignments = {item["id"]: item["assigned_team_number"] for item in response.data}
         self.assertEqual(response_assignments[str(source_attendance.id)], target_team_number)
         self.assertEqual(response_assignments[str(target_attendance.id)], source_team_number)
 
@@ -502,7 +508,11 @@ class ApiFlowTests(APITestCase):
             worksheet.cell(
                 row_number,
                 4,
-                1 if attendance.id == target_attendance.id else 2 if attendance.id == assistant_attendance.id else 0,
+                1
+                if attendance.id == target_attendance.id
+                else 2
+                if attendance.id == assistant_attendance.id
+                else 0,
             )
 
         output = io.BytesIO()
@@ -533,9 +543,14 @@ class ApiFlowTests(APITestCase):
             ).exists()
         )
         self.assertEqual(ranking_response.status_code, 200)
-        self.assertEqual(ranking_response.data["top_scorers"][0]["player_id"], str(target_attendance.player_id))
+        self.assertEqual(
+            ranking_response.data["top_scorers"][0]["player_id"], str(target_attendance.player_id)
+        )
         self.assertEqual(ranking_response.data["top_scorers"][0]["goals"], 2)
-        self.assertEqual(ranking_response.data["top_assistants"][0]["player_id"], str(assistant_attendance.player_id))
+        self.assertEqual(
+            ranking_response.data["top_assistants"][0]["player_id"],
+            str(assistant_attendance.player_id),
+        )
         self.assertEqual(ranking_response.data["top_assistants"][0]["assists"], 2)
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
@@ -592,11 +607,15 @@ class ApiFlowTests(APITestCase):
 
         self.assertEqual(admin_response.status_code, 200)
         self.assertEqual(common_response.status_code, 200)
-        self.assertIn(str(self.players[0].id), [item["player_id"] for item in admin_response.data["players"]])
+        self.assertIn(
+            str(self.players[0].id), [item["player_id"] for item in admin_response.data["players"]]
+        )
         self.assertEqual(len(admin_response.data["matches"]), 1)
         history_points = admin_response.data["matches"][0]["points"]
         self.assertIn(str(self.players[0].id), [item["player_id"] for item in history_points])
-        player_point = next(item for item in history_points if item["player_id"] == str(self.players[0].id))
+        player_point = next(
+            item for item in history_points if item["player_id"] == str(self.players[0].id)
+        )
         self.assertEqual(player_point["overall"], 88)
         self.assertNotIn("Convidado Historico", [item["display_name"] for item in history_points])
 
@@ -842,7 +861,9 @@ class ApiFlowTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["user"]["id"], str(self.common_user.id))
         self.assertEqual(response.data["linked_player"]["id"], str(self.players[0].id))
-        self.assertEqual(Decimal(response.data["financial_status"]["paid_amount"]), Decimal("70.00"))
+        self.assertEqual(
+            Decimal(response.data["financial_status"]["paid_amount"]), Decimal("70.00")
+        )
         self.assertGreaterEqual(response.data["attendance_status"]["confirmed_count"], 1)
 
     def test_admin_can_access_analytics_endpoints(self) -> None:
@@ -940,7 +961,10 @@ class ApiFlowTests(APITestCase):
         self.assertFalse(state_response.data["can_rate"])
         self.assertIn("Procure um administrador", state_response.data["locked_reason"])
         self.assertEqual(submit_response.status_code, 400)
-        self.assertEqual(MatchPlayerRating.objects.filter(match=self.match, rater_user=self.common_user).count(), 0)
+        self.assertEqual(
+            MatchPlayerRating.objects.filter(match=self.match, rater_user=self.common_user).count(),
+            0,
+        )
         self.players[1].refresh_from_db()
         self.assertEqual(self.players[1].overall, original_overall)
 
@@ -1009,9 +1033,17 @@ class ApiFlowTests(APITestCase):
             [item["attendance_id"] for item in state_response.data["items"]],
             [str(teammate_attendance.id)],
         )
-        self.assertNotIn(str(self_attendance.id), [item["attendance_id"] for item in state_response.data["items"]])
+        self.assertNotIn(
+            str(self_attendance.id),
+            [item["attendance_id"] for item in state_response.data["items"]],
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(MatchPlayerRating.objects.filter(match=other_match, rater_user=self.common_user).count(), 1)
+        self.assertEqual(
+            MatchPlayerRating.objects.filter(
+                match=other_match, rater_user=self.common_user
+            ).count(),
+            1,
+        )
         self.assertEqual(opponent_response.status_code, 400)
         self.assertEqual(self_response.status_code, 400)
 
@@ -1219,11 +1251,15 @@ class ApiFlowTests(APITestCase):
         self.assertFalse(response.data["can_rate"])
         self.assertEqual(response.data["items"], [])
         self.assertEqual(len(response.data["log"]), 1)
-        self.assertEqual(response.data["log"][0]["rated_display_name"], target_attendance.display_name)
+        self.assertEqual(
+            response.data["log"][0]["rated_display_name"], target_attendance.display_name
+        )
         self.assertEqual(response.data["log"][0]["score"], "10.0")
         self.assertIsNotNone(response.data["ratings_finalized_at"])
         summary_entry = next(
-            item for item in response.data["overall_summary"] if item["player_id"] == str(self.players[1].id)
+            item
+            for item in response.data["overall_summary"]
+            if item["player_id"] == str(self.players[1].id)
         )
         self.assertEqual(summary_entry["previous_overall"], original_overall)
         self.players[1].refresh_from_db()
@@ -1251,7 +1287,9 @@ class ApiFlowTests(APITestCase):
         self.assertFalse(response.data["can_rate"])
         self.assertIsNotNone(response.data["ratings_finalized_at"])
         summary_entry = next(
-            item for item in response.data["overall_summary"] if item["player_id"] == str(self.players[1].id)
+            item
+            for item in response.data["overall_summary"]
+            if item["player_id"] == str(self.players[1].id)
         )
         self.players[1].refresh_from_db()
         self.assertEqual(summary_entry["previous_overall"], original_overall)
@@ -1339,7 +1377,9 @@ class ApiFlowTests(APITestCase):
         target_player.refresh_from_db()
         self.assertEqual(target_player.overall, 77)
         summary_entry = next(
-            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+            item
+            for item in response.data["overall_summary"]
+            if item["player_id"] == str(target_player.id)
         )
         self.assertEqual(summary_entry["previous_overall"], 70)
         self.assertEqual(summary_entry["current_overall"], 77)
@@ -1393,7 +1433,9 @@ class ApiFlowTests(APITestCase):
         target_player.refresh_from_db()
         self.assertEqual(target_player.overall, 60)
         summary_entry = next(
-            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+            item
+            for item in response.data["overall_summary"]
+            if item["player_id"] == str(target_player.id)
         )
         self.assertEqual(summary_entry["average_score"], "5.90")
         self.assertEqual(summary_entry["rating_count"], 4)
@@ -1436,7 +1478,9 @@ class ApiFlowTests(APITestCase):
         target_player.refresh_from_db()
         self.assertEqual(target_player.overall, 95)
         summary_entry = next(
-            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+            item
+            for item in response.data["overall_summary"]
+            if item["player_id"] == str(target_player.id)
         )
         self.assertEqual(summary_entry["previous_overall"], 90)
         self.assertEqual(summary_entry["current_overall"], 95)
@@ -1532,7 +1576,9 @@ class ApiFlowTests(APITestCase):
         target_player.refresh_from_db()
         self.assertEqual(target_player.overall, 95)
         summary_entry = next(
-            item for item in response.data["overall_summary"] if item["player_id"] == str(target_player.id)
+            item
+            for item in response.data["overall_summary"]
+            if item["player_id"] == str(target_player.id)
         )
         self.assertEqual(summary_entry["previous_overall"], 90)
         self.assertEqual(summary_entry["current_overall"], 95)
@@ -1553,7 +1599,9 @@ class ApiFlowTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(Transaction.objects.filter(description="Taxa extra dos coletes").count(), 1)
+        self.assertEqual(
+            Transaction.objects.filter(description="Taxa extra dos coletes").count(), 1
+        )
 
     def test_admin_can_create_player_with_manual_overall(self) -> None:
         response = self.client.post(

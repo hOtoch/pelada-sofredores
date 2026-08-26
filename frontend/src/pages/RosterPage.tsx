@@ -26,7 +26,14 @@ const defaultFormValues: PlayerFormValues = {
   },
 };
 
-const positionOptions = ["ALL", "GOALKEEPER", "DEFENDER", "MIDFIELDER", "FORWARD", "UNIVERSAL"] as const;
+const positionOptions = [
+  "ALL",
+  "GOALKEEPER",
+  "DEFENDER",
+  "MIDFIELDER",
+  "FORWARD",
+  "UNIVERSAL",
+] as const;
 
 const defaultAccountFormValues: AccessAccountFormValues = {
   username: "",
@@ -120,9 +127,8 @@ export function RosterPage({
   const [formValues, setFormValues] = useState<PlayerFormValues>(defaultFormValues);
   const [accountEditorMode, setAccountEditorMode] = useState<"create" | "edit" | null>(null);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const [accountFormValues, setAccountFormValues] = useState<AccessAccountFormValues>(
-    defaultAccountFormValues,
-  );
+  const [accountFormValues, setAccountFormValues] =
+    useState<AccessAccountFormValues>(defaultAccountFormValues);
   const [accountFormError, setAccountFormError] = useState<string>();
 
   const editingPlayer = players.find((player) => player.id === editingPlayerId) ?? null;
@@ -210,7 +216,9 @@ export function RosterPage({
         field === "monthlyFeeAmount"
           ? Number(rawValue)
           : field === "shirtNumber"
-            ? (rawValue === "" ? null : Number(rawValue))
+            ? rawValue === ""
+              ? null
+              : Number(rawValue)
             : rawValue;
       setFormValues((prev) => {
         return { ...prev, [field]: value };
@@ -218,8 +226,7 @@ export function RosterPage({
     };
 
   const handleRatingChange =
-    (field: keyof PlayerFormValues["ratings"]) =>
-    (event: ChangeEvent<HTMLInputElement>) => {
+    (field: keyof PlayerFormValues["ratings"]) => (event: ChangeEvent<HTMLInputElement>) => {
       const value = clampRating(Number(event.target.value));
       setFormValues((prev) => ({
         ...prev,
@@ -247,7 +254,8 @@ export function RosterPage({
         event.target instanceof HTMLInputElement && event.target.type === "checkbox"
           ? event.target.checked
           : event.target.value;
-      const value = field === "linkedPlayerId" ? (rawValue === "" ? null : String(rawValue)) : rawValue;
+      const value =
+        field === "linkedPlayerId" ? (rawValue === "" ? null : String(rawValue)) : rawValue;
       setAccountFormValues((prev) => ({ ...prev, [field]: value }));
     };
 
@@ -293,7 +301,12 @@ export function RosterPage({
           <p className="eyebrow">Elenco</p>
           <h2 style={{ fontFamily: themeTokens.fontFamily.heading }}>Mensalistas</h2>
           <p className="muted">
-            Status atual: {filters.status === "ALL" ? "Todos" : filters.status === "ACTIVE" ? "ativos" : "inativos"}
+            Status atual:{" "}
+            {filters.status === "ALL"
+              ? "Todos"
+              : filters.status === "ACTIVE"
+                ? "ativos"
+                : "inativos"}
           </p>
         </div>
         {canEdit && (
@@ -317,7 +330,11 @@ export function RosterPage({
         </label>
         <label>
           Status
-          <select className="input-field" value={filters.status} onChange={handleFilterChange("status")}>
+          <select
+            className="input-field"
+            value={filters.status}
+            onChange={handleFilterChange("status")}
+          >
             <option value="ALL">Todos</option>
             <option value="ACTIVE">Ativos</option>
             <option value="INACTIVE">Inativos</option>
@@ -325,7 +342,11 @@ export function RosterPage({
         </label>
         <label>
           Posição
-          <select className="input-field" value={filters.position} onChange={handleFilterChange("position")}>
+          <select
+            className="input-field"
+            value={filters.position}
+            onChange={handleFilterChange("position")}
+          >
             {positionOptions.map((option) => (
               <option key={option} value={option}>
                 {positionLabels[option]}
@@ -426,47 +447,49 @@ export function RosterPage({
             ) : (
               accounts.map((account) => (
                 <article key={account.id} className="glass-card account-card">
-              <header>
-                <div>
-                  <h3>{account.displayName || account.username}</h3>
-                  <p className="muted">@{account.username}</p>
-                </div>
-                <span className={`role-chip ${account.role === "ADMIN" ? "admin" : "common"}`}>
-                  {roleLabels[account.role]}
-                </span>
-              </header>
-              <div className="account-meta">
-                <span>{account.email || "Sem e-mail"}</span>
-                <span>{account.linkedPlayerName || "Sem jogador vinculado"}</span>
-              </div>
-              <div className="account-status-row">
-                <span className={`status-chip ${account.isActive ? "paid" : "unpaid"}`}>
-                  {account.isActive ? "Ativa" : "Inativa"}
-                </span>
-                <span className={`status-chip ${account.mustChangePassword ? "partial" : "exempt"}`}>
-                  {account.mustChangePassword ? "Troca de senha pendente" : "Senha regular"}
-                </span>
-              </div>
-              {canEdit && (
-                <div className="account-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => openEditAccountModal(account.id)}
-                    disabled={!canManageAccounts}
-                  >
-                    Editar conta
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => void handleResetPassword(account.id)}
-                    disabled={!onResetAccountPassword || isSubmittingAccount}
-                  >
-                    Resetar senha
-                  </button>
-                </div>
-              )}
+                  <header>
+                    <div>
+                      <h3>{account.displayName || account.username}</h3>
+                      <p className="muted">@{account.username}</p>
+                    </div>
+                    <span className={`role-chip ${account.role === "ADMIN" ? "admin" : "common"}`}>
+                      {roleLabels[account.role]}
+                    </span>
+                  </header>
+                  <div className="account-meta">
+                    <span>{account.email || "Sem e-mail"}</span>
+                    <span>{account.linkedPlayerName || "Sem jogador vinculado"}</span>
+                  </div>
+                  <div className="account-status-row">
+                    <span className={`status-chip ${account.isActive ? "paid" : "unpaid"}`}>
+                      {account.isActive ? "Ativa" : "Inativa"}
+                    </span>
+                    <span
+                      className={`status-chip ${account.mustChangePassword ? "partial" : "exempt"}`}
+                    >
+                      {account.mustChangePassword ? "Troca de senha pendente" : "Senha regular"}
+                    </span>
+                  </div>
+                  {canEdit && (
+                    <div className="account-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => openEditAccountModal(account.id)}
+                        disabled={!canManageAccounts}
+                      >
+                        Editar conta
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => void handleResetPassword(account.id)}
+                        disabled={!onResetAccountPassword || isSubmittingAccount}
+                      >
+                        Resetar senha
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))
             )}
@@ -498,7 +521,11 @@ export function RosterPage({
               </label>
               <label>
                 Apelido
-                <input className="input-field" value={formValues.nickname} onChange={handleFieldChange("nickname")} />
+                <input
+                  className="input-field"
+                  value={formValues.nickname}
+                  onChange={handleFieldChange("nickname")}
+                />
               </label>
               <label>
                 Posição que joga
@@ -539,7 +566,11 @@ export function RosterPage({
               </label>
               <label>
                 Email
-                <input className="input-field" value={formValues.email ?? ""} onChange={handleFieldChange("email")} />
+                <input
+                  className="input-field"
+                  value={formValues.email ?? ""}
+                  onChange={handleFieldChange("email")}
+                />
               </label>
               <label>
                 Telefone
@@ -586,7 +617,11 @@ export function RosterPage({
                   Cancelar
                 </button>
                 <button type="submit" className="primary-button" disabled={isSubmitting}>
-                  {isSubmitting ? "Salvando..." : editorMode === "create" ? "Criar jogador" : "Salvar ajustes"}
+                  {isSubmitting
+                    ? "Salvando..."
+                    : editorMode === "create"
+                      ? "Criar jogador"
+                      : "Salvar ajustes"}
                 </button>
               </div>
             </form>
@@ -668,7 +703,9 @@ export function RosterPage({
                   type="password"
                   value={accountFormValues.password}
                   onChange={handleAccountFieldChange("password")}
-                  placeholder={accountEditorMode === "create" ? "Defina a senha" : "Preencha para alterar"}
+                  placeholder={
+                    accountEditorMode === "create" ? "Defina a senha" : "Preencha para alterar"
+                  }
                   required={accountEditorMode === "create"}
                 />
               </label>
@@ -688,13 +725,19 @@ export function RosterPage({
                 />
                 Exigir troca de senha no próximo login
               </label>
-              {accountFormError ? <p className="error-text form-span-2">{accountFormError}</p> : null}
+              {accountFormError ? (
+                <p className="error-text form-span-2">{accountFormError}</p>
+              ) : null}
               <div className="section-actions form-span-2">
                 <button type="button" className="ghost-button" onClick={closeAccountModal}>
                   Cancelar
                 </button>
                 <button type="submit" className="primary-button" disabled={isSubmittingAccount}>
-                  {isSubmittingAccount ? "Salvando..." : accountEditorMode === "create" ? "Criar conta" : "Salvar conta"}
+                  {isSubmittingAccount
+                    ? "Salvando..."
+                    : accountEditorMode === "create"
+                      ? "Criar conta"
+                      : "Salvar conta"}
                 </button>
               </div>
             </form>

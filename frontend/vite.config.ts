@@ -11,14 +11,14 @@ export default defineConfig({
     },
   },
   preview: {
-    port: 4173
+    port: 4173,
   },
   build: {
-    target: "es2020"
+    target: "es2020",
   },
   resolve: {
     alias: {
-      "@": "/src"
-    }
-  }
+      "@": "/src",
+    },
+  },
 });

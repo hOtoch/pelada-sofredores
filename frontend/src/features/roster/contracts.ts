@@ -1,9 +1,4 @@
-import type {
-  PlayerRatings,
-  PlayerSummary,
-  PreferredPosition,
-  UserRole,
-} from "../../domain/types";
+import type { PlayerRatings, PlayerSummary, PreferredPosition, UserRole } from "../../domain/types";
 
 export interface PlayerFilterState {
   search: string;

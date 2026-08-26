@@ -49,7 +49,13 @@ class TransactionAdmin(admin.ModelAdmin):
 
 @admin.register(MatchAttendance)
 class MatchAttendanceAdmin(admin.ModelAdmin):
-    list_display = ("display_name", "match", "attendance_status", "is_guest", "assigned_team_number")
+    list_display = (
+        "display_name",
+        "match",
+        "attendance_status",
+        "is_guest",
+        "assigned_team_number",
+    )
     list_filter = ("attendance_status", "is_guest")
     search_fields = ("display_name",)
 

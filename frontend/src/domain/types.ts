@@ -3,12 +3,7 @@ export type ISODateTimeString = string;
 
 export type UserRole = "ADMIN" | "COMMON";
 export type PlayerType = "MEMBER" | "GUEST";
-export type PreferredPosition =
-  | "GOALKEEPER"
-  | "DEFENDER"
-  | "MIDFIELDER"
-  | "FORWARD"
-  | "UNIVERSAL";
+export type PreferredPosition = "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD" | "UNIVERSAL";
 export type TransactionDirection = "INFLOW" | "OUTFLOW";
 export type TransactionCategory =
   | "MONTHLY_FEE"

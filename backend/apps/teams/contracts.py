@@ -54,5 +54,4 @@ class TeamGenerationResult:
 
 
 class TeamBalancer(Protocol):
-    def generate(self, request: TeamGenerationRequest) -> TeamGenerationResult:
-        ...
+    def generate(self, request: TeamGenerationRequest) -> TeamGenerationResult: ...

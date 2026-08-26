@@ -80,7 +80,9 @@ export function RankingPage({
   onImportStatsSheet: (file: File) => Promise<void> | void;
 }) {
   const statsSheetInputRef = useRef<HTMLInputElement | null>(null);
-  const sortedMatches = [...matches].sort((left, right) => right.scheduledAt.localeCompare(left.scheduledAt));
+  const sortedMatches = [...matches].sort((left, right) =>
+    right.scheduledAt.localeCompare(left.scheduledAt),
+  );
 
   const handleExportStatsSheet = async () => {
     try {
@@ -120,7 +122,8 @@ export function RankingPage({
               <p className="eyebrow">Administração</p>
               <h3>Planilha da rodada</h3>
               <small className="muted">
-                Exporte a pelada, preencha gols, assistências e vitória, depois importe o XLSX preenchido.
+                Exporte a pelada, preencha gols, assistências e vitória, depois importe o XLSX
+                preenchido.
               </small>
             </div>
           </div>
@@ -194,12 +197,16 @@ export function RankingPage({
                 ) : (
                   <div className="ranking-list">
                     {entries.map((entry, index) => (
-                      <div key={`${section.key}-${entry.playerId ?? entry.playerName}`} className="ranking-row">
+                      <div
+                        key={`${section.key}-${entry.playerId ?? entry.playerName}`}
+                        className="ranking-row"
+                      >
                         <span className="ranking-position">{index + 1}</span>
                         <div className="ranking-player">
                           <strong>{entry.playerName}</strong>
                           <small className="muted">
-                            {entry.goals} gol(s) · {entry.assists} assistência(s) · {entry.wins} vitória(s)
+                            {entry.goals} gol(s) · {entry.assists} assistência(s) · {entry.wins}{" "}
+                            vitória(s)
                           </small>
                         </div>
                         <RankingMetric entry={entry} metric={section.metric} />

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Entrypoint do projeto Peladinhas Sofredores."""
+
 import os
 import sys
 

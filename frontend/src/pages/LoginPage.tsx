@@ -34,11 +34,10 @@ export function LoginPage({
   const [localSignupError, setLocalSignupError] = useState<string>();
   const id = useId();
 
-  const handleChange =
-    (field: keyof LoginFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
-      const nextValue = field === "rememberMe" ? event.target.checked : event.target.value;
-      setValues((prev) => ({ ...prev, [field]: nextValue }));
-    };
+  const handleChange = (field: keyof LoginFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = field === "rememberMe" ? event.target.checked : event.target.value;
+    setValues((prev) => ({ ...prev, [field]: nextValue }));
+  };
 
   const handleSignupChange =
     (field: keyof SignupFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
@@ -108,7 +107,12 @@ export function LoginPage({
             />
           </label>
           <label className="checkbox-field" htmlFor={`${id}-remember`}>
-            <input id={`${id}-remember`} type="checkbox" checked={values.rememberMe} onChange={handleChange("rememberMe")} />
+            <input
+              id={`${id}-remember`}
+              type="checkbox"
+              checked={values.rememberMe}
+              onChange={handleChange("rememberMe")}
+            />
             Lembrar sessão
           </label>
           {errorMessage && <p className="error-text">{errorMessage}</p>}

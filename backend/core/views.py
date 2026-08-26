@@ -277,7 +277,9 @@ def recalculate_finalized_match_ratings(match: Match) -> bool:
             )
         }
 
-        for player in Player.objects.select_for_update().filter(id__in=attendance_overall_by_player_id):
+        for player in Player.objects.select_for_update().filter(
+            id__in=attendance_overall_by_player_id
+        ):
             recalculate_player_overall_from_match_ratings(
                 player,
                 locked_match,
@@ -432,9 +434,7 @@ def finalize_match(match: Match, winning_team_number: int | None, user: User | N
                 }
             )
         if winning_team_number not in team_numbers:
-            raise ValidationError(
-                {"winning_team_number": "Escolha um dos times desta pelada."}
-            )
+            raise ValidationError({"winning_team_number": "Escolha um dos times desta pelada."})
 
     now = timezone.now()
     with transaction.atomic():
@@ -455,7 +455,18 @@ def finalize_match(match: Match, winning_team_number: int | None, user: User | N
 
 MATCH_STATS_SHEET_NAME = "Estatisticas"
 MATCH_STATS_HEADERS = ["Jogador", "Perfil", "Gols", "Assistencias"]
-TRUTHY_SHEET_VALUES = {"1", "x", "s", "sim", "true", "verdadeiro", "vitoria", "ganhou", "win", "yes"}
+TRUTHY_SHEET_VALUES = {
+    "1",
+    "x",
+    "s",
+    "sim",
+    "true",
+    "verdadeiro",
+    "vitoria",
+    "ganhou",
+    "win",
+    "yes",
+}
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -511,7 +522,9 @@ def build_match_stats_xlsx_response(match: Match) -> HttpResponse:
     center_alignment = Alignment(horizontal="center", vertical="center")
 
     worksheet.merge_cells("A1:D1")
-    worksheet["A1"] = f"Pelada de {timezone.localtime(match.scheduled_at).strftime('%d/%m/%Y %H:%M')}"
+    worksheet["A1"] = (
+        f"Pelada de {timezone.localtime(match.scheduled_at).strftime('%d/%m/%Y %H:%M')}"
+    )
     worksheet["A1"].fill = title_fill
     worksheet["A1"].font = Font(color="FFFFFF", bold=True, size=14)
     worksheet["A1"].alignment = center_alignment
@@ -534,8 +547,7 @@ def build_match_stats_xlsx_response(match: Match) -> HttpResponse:
         .order_by("assigned_team_number", "assigned_team_name", "display_name")
     )
     stats_by_attendance_id = {
-        stat.attendance_id: stat
-        for stat in MatchPlayerStat.objects.filter(match=match)
+        stat.attendance_id: stat for stat in MatchPlayerStat.objects.filter(match=match)
     }
     team_numbers = sorted(
         {
@@ -547,10 +559,17 @@ def build_match_stats_xlsx_response(match: Match) -> HttpResponse:
 
     current_row = 4
     for team_number in team_numbers:
-        team_entries = [entry for entry in attendance_entries if entry.assigned_team_number == team_number]
+        team_entries = [
+            entry for entry in attendance_entries if entry.assigned_team_number == team_number
+        ]
         team_name = team_entries[0].assigned_team_name or f"Time {team_number}"
-        team_won = any(stats_by_attendance_id.get(entry.id) and stats_by_attendance_id[entry.id].team_won for entry in team_entries)
-        worksheet.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
+        team_won = any(
+            stats_by_attendance_id.get(entry.id) and stats_by_attendance_id[entry.id].team_won
+            for entry in team_entries
+        )
+        worksheet.merge_cells(
+            start_row=current_row, start_column=1, end_row=current_row, end_column=2
+        )
         worksheet.cell(current_row, 1, team_name)
         worksheet.cell(current_row, 3, "Vitoria do time")
         worksheet.cell(current_row, 4, "SIM" if team_won else "")
@@ -583,7 +602,9 @@ def build_match_stats_xlsx_response(match: Match) -> HttpResponse:
             for index, value in enumerate(values, start=1):
                 cell = worksheet.cell(current_row, index, value)
                 cell.border = cell_border
-                cell.alignment = center_alignment if index in {2, 3, 4} else Alignment(vertical="center")
+                cell.alignment = (
+                    center_alignment if index in {2, 3, 4} else Alignment(vertical="center")
+                )
                 if index in {3, 4}:
                     cell.fill = editable_fill
                     cell.protection = Protection(locked=False)
@@ -592,9 +613,13 @@ def build_match_stats_xlsx_response(match: Match) -> HttpResponse:
 
         current_row += 1
 
-    unassigned_entries = [entry for entry in attendance_entries if entry.assigned_team_number is None]
+    unassigned_entries = [
+        entry for entry in attendance_entries if entry.assigned_team_number is None
+    ]
     if unassigned_entries:
-        worksheet.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+        worksheet.merge_cells(
+            start_row=current_row, start_column=1, end_row=current_row, end_column=4
+        )
         worksheet.cell(current_row, 1, "Sem time")
         for column in range(1, 5):
             cell = worksheet.cell(current_row, column)
@@ -624,7 +649,9 @@ def build_match_stats_xlsx_response(match: Match) -> HttpResponse:
             for index, value in enumerate(values, start=1):
                 cell = worksheet.cell(current_row, index, value)
                 cell.border = cell_border
-                cell.alignment = center_alignment if index in {2, 3, 4} else Alignment(vertical="center")
+                cell.alignment = (
+                    center_alignment if index in {2, 3, 4} else Alignment(vertical="center")
+                )
                 if index in {3, 4}:
                     cell.fill = editable_fill
                     cell.protection = Protection(locked=False)
@@ -657,13 +684,17 @@ def import_match_stats_from_xlsx(match: Match, uploaded_file, user: User) -> dic
 
     worksheet = workbook[MATCH_STATS_SHEET_NAME]
     attendance_entries = list(
-        match.attendance_entries.select_related("player")
-        .filter(attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED)
+        match.attendance_entries.select_related("player").filter(
+            attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED
+        )
     )
     attendance_by_visible_key = {}
     duplicate_visible_keys = set()
     for entry in attendance_entries:
-        visible_key = (get_attendance_visible_team_key(entry), normalize_csv_key(entry.display_name))
+        visible_key = (
+            get_attendance_visible_team_key(entry),
+            normalize_csv_key(entry.display_name),
+        )
         if visible_key in attendance_by_visible_key:
             duplicate_visible_keys.add(visible_key)
             continue
@@ -703,7 +734,9 @@ def import_match_stats_from_xlsx(match: Match, uploaded_file, user: User) -> dic
         visible_key = (current_team_key, normalize_csv_key(first_value))
         if visible_key in duplicate_visible_keys:
             raise ValidationError(
-                {"file": f"Ha jogadores com nome duplicado no time {first_value}. Renomeie antes de importar."}
+                {
+                    "file": f"Ha jogadores com nome duplicado no time {first_value}. Renomeie antes de importar."
+                }
             )
 
         attendance_entry = attendance_by_visible_key.get(visible_key)
@@ -754,7 +787,9 @@ def import_match_stats_from_xlsx(match: Match, uploaded_file, user: User) -> dic
         )
 
     winning_team_numbers = {
-        stat.team_number for stat in stats_to_create if stat.team_won and stat.team_number is not None
+        stat.team_number
+        for stat in stats_to_create
+        if stat.team_won and stat.team_number is not None
     }
 
     with transaction.atomic():
@@ -826,9 +861,7 @@ def build_sports_ranking(limit: int) -> dict:
 class IsRoleAdmin(BasePermission):
     def has_permission(self, request, view):
         return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == Role.ADMIN
+            request.user and request.user.is_authenticated and request.user.role == Role.ADMIN
         )
 
 
@@ -883,9 +916,7 @@ class MatchViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         if getattr(self.request.user, "role", None) == Role.ADMIN:
             return queryset
-        return queryset.filter(
-            status__in=[Match.Status.OPEN, Match.Status.ARCHIVED]
-        ).distinct()
+        return queryset.filter(status__in=[Match.Status.OPEN, Match.Status.ARCHIVED]).distinct()
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -916,10 +947,7 @@ class MatchViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="current")
     def current(self, request):
         match = (
-            self.get_queryset()
-            .filter(status=Match.Status.OPEN)
-            .order_by("scheduled_at")
-            .first()
+            self.get_queryset().filter(status=Match.Status.OPEN).order_by("scheduled_at").first()
         )
         if match is None:
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -932,7 +960,9 @@ class MatchViewSet(viewsets.ModelViewSet):
         match = self.get_object()
         team_count = input_serializer.validated_data.get("team_count", match.expected_team_count)
         attendance_entries = list(
-            match.attendance_entries.filter(attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED)
+            match.attendance_entries.filter(
+                attendance_status=MatchAttendance.AttendanceStatus.CONFIRMED
+            )
         )
         balancer = GreedyTeamBalancer()
         players = tuple(
@@ -1034,7 +1064,10 @@ class MatchViewSet(viewsets.ModelViewSet):
             if source_entry is None or target_entry is None:
                 raise ValidationError({"detail": "Selecione jogadores confirmados desta pelada."})
 
-            if source_entry.assigned_team_number is None or target_entry.assigned_team_number is None:
+            if (
+                source_entry.assigned_team_number is None
+                or target_entry.assigned_team_number is None
+            ):
                 raise ValidationError({"detail": "Gere os times antes de trocar jogadores."})
 
             if source_entry.assigned_team_number == target_entry.assigned_team_number:
@@ -1047,12 +1080,18 @@ class MatchViewSet(viewsets.ModelViewSet):
             target_entry.assigned_team_number = source_team_number
             target_entry.assigned_team_name = source_team_name
 
-            source_entry.save(update_fields=["assigned_team_number", "assigned_team_name", "updated_at"])
-            target_entry.save(update_fields=["assigned_team_number", "assigned_team_name", "updated_at"])
+            source_entry.save(
+                update_fields=["assigned_team_number", "assigned_team_name", "updated_at"]
+            )
+            target_entry.save(
+                update_fields=["assigned_team_number", "assigned_team_name", "updated_at"]
+            )
             match.updated_at = timezone.now()
             match.save(update_fields=["updated_at"])
 
-        refreshed_attendance = match.attendance_entries.select_related("match", "player", "invited_by").order_by(
+        refreshed_attendance = match.attendance_entries.select_related(
+            "match", "player", "invited_by"
+        ).order_by(
             "display_name",
         )
         return Response(MatchAttendanceSerializer(refreshed_attendance, many=True).data)
@@ -1093,7 +1132,9 @@ class MatchViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="overall-history")
     def overall_history(self, request):
         finalize_due_match_ratings()
-        member_players = Player.objects.filter(player_type=Player.PlayerType.MEMBER).order_by("full_name")
+        member_players = Player.objects.filter(player_type=Player.PlayerType.MEMBER).order_by(
+            "full_name"
+        )
         players_payload = [
             {
                 "player_id": str(player.id),
@@ -1263,7 +1304,9 @@ class MatchViewSet(viewsets.ModelViewSet):
             and not linked_player
         ):
             locked_reason = UNLINKED_RATING_LOCK_REASON
-        can_rate = bool(getattr(self.request.user, "role", None) != Role.ADMIN and not locked_reason)
+        can_rate = bool(
+            getattr(self.request.user, "role", None) != Role.ADMIN and not locked_reason
+        )
         is_window_closed = bool(
             match.status == Match.Status.ARCHIVED
             and (match.ratings_finalized_at or is_rating_window_expired(match))
@@ -1416,7 +1459,9 @@ class MatchViewSet(viewsets.ModelViewSet):
         if match.status != Match.Status.ARCHIVED:
             raise ValidationError({"detail": "Arquive a pelada antes de recalcular as notas."})
         if not match.ratings_finalized_at:
-            raise ValidationError({"detail": "Finalize a janela de notas antes de recalcular os overalls."})
+            raise ValidationError(
+                {"detail": "Finalize a janela de notas antes de recalcular os overalls."}
+            )
 
         recalculate_finalized_match_ratings(match)
         return Response(self._build_rating_state(match))
@@ -1523,12 +1568,18 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
         if attendance.attendance_status != MatchAttendance.AttendanceStatus.CONFIRMED:
             raise ValidationError({"detail": "A taxa só é cobrada de convidados confirmados."})
         if attendance.match.status not in FINAL_MATCH_STATUSES:
-            raise ValidationError({"detail": "A taxa do convidado só é finalizada ao fim da pelada."})
+            raise ValidationError(
+                {"detail": "A taxa do convidado só é finalizada ao fim da pelada."}
+            )
         if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.PAID:
             return Response(self.get_serializer(attendance).data)
 
         with transaction.atomic():
-            attendance = MatchAttendance.objects.select_for_update().select_related("match").get(pk=attendance.pk)
+            attendance = (
+                MatchAttendance.objects.select_for_update()
+                .select_related("match")
+                .get(pk=attendance.pk)
+            )
             if attendance.guest_fee_status != MatchAttendance.GuestFeeStatus.PAID:
                 Transaction.objects.create(
                     direction=Transaction.Direction.INFLOW,
@@ -1546,7 +1597,9 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
                 )
                 attendance.guest_fee_status = MatchAttendance.GuestFeeStatus.PAID
                 attendance.guest_fee_paid_at = timezone.now()
-                attendance.save(update_fields=["guest_fee_status", "guest_fee_paid_at", "updated_at"])
+                attendance.save(
+                    update_fields=["guest_fee_status", "guest_fee_paid_at", "updated_at"]
+                )
 
         return Response(self.get_serializer(attendance).data)
 
@@ -1558,18 +1611,26 @@ class MatchAttendanceViewSet(viewsets.ModelViewSet):
         if attendance.attendance_status != MatchAttendance.AttendanceStatus.CONFIRMED:
             raise ValidationError({"detail": "A taxa só é cobrada de convidados confirmados."})
         if attendance.match.status not in FINAL_MATCH_STATUSES:
-            raise ValidationError({"detail": "A taxa do convidado só é finalizada ao fim da pelada."})
+            raise ValidationError(
+                {"detail": "A taxa do convidado só é finalizada ao fim da pelada."}
+            )
         if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.PAID:
             raise ValidationError({"detail": "A taxa do convidado ja foi marcada como paga."})
         if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.WAIVED:
             return Response(self.get_serializer(attendance).data)
 
         with transaction.atomic():
-            attendance = MatchAttendance.objects.select_for_update().select_related("match").get(pk=attendance.pk)
+            attendance = (
+                MatchAttendance.objects.select_for_update()
+                .select_related("match")
+                .get(pk=attendance.pk)
+            )
             if attendance.guest_fee_status == MatchAttendance.GuestFeeStatus.PENDING:
                 attendance.guest_fee_status = MatchAttendance.GuestFeeStatus.WAIVED
                 attendance.guest_fee_paid_at = None
-                attendance.save(update_fields=["guest_fee_status", "guest_fee_paid_at", "updated_at"])
+                attendance.save(
+                    update_fields=["guest_fee_status", "guest_fee_paid_at", "updated_at"]
+                )
 
         return Response(self.get_serializer(attendance).data)
 
@@ -1716,7 +1777,9 @@ class PortalOverviewView(APIView):
         if linked_player:
             monthly_map = build_player_payment_map([linked_player.id], month_start, month_end)
             paid_amount = monthly_map.get(linked_player.id, {}).get("paid_amount", Decimal("0.00"))
-            pending_amount = monthly_map.get(linked_player.id, {}).get("pending_amount", Decimal("0.00"))
+            pending_amount = monthly_map.get(linked_player.id, {}).get(
+                "pending_amount", Decimal("0.00")
+            )
             expected_monthly_fee = linked_player.monthly_fee_amount
             outstanding_amount = expected_monthly_fee - paid_amount
             if outstanding_amount < Decimal("0.00"):
@@ -1769,10 +1832,9 @@ class PortalOverviewView(APIView):
                 for entry in attendance_entries
             ]
 
-        upcoming_matches_qs = (
-            Match.objects.filter(status=Match.Status.OPEN, scheduled_at__gte=timezone.now())
-            .order_by("scheduled_at")[:5]
-        )
+        upcoming_matches_qs = Match.objects.filter(
+            status=Match.Status.OPEN, scheduled_at__gte=timezone.now()
+        ).order_by("scheduled_at")[:5]
         upcoming_matches = list(upcoming_matches_qs)
         attendance_by_match = {}
         if linked_player and upcoming_matches:
@@ -1952,7 +2014,9 @@ class PresenceRankingView(APIView):
             attendance_rate = Decimal("0.00")
             if player.total_calls:
                 attendance_rate = (
-                    Decimal(player.confirmed_count) * Decimal("100.00") / Decimal(player.total_calls)
+                    Decimal(player.confirmed_count)
+                    * Decimal("100.00")
+                    / Decimal(player.total_calls)
                 ).quantize(Decimal("0.01"))
 
             ranking.append(
@@ -1975,7 +2039,9 @@ class PaymentRankingView(APIView):
     permission_classes = [IsRoleAdmin]
 
     def get(self, request):
-        month_start, reference_month = parse_reference_month(request.query_params.get("reference_month"))
+        month_start, reference_month = parse_reference_month(
+            request.query_params.get("reference_month")
+        )
         _, month_end = month_bounds(month_start)
 
         try:
@@ -2016,7 +2082,13 @@ class PaymentRankingView(APIView):
                 }
             )
 
-        ranking.sort(key=lambda item: (item["outstanding_amount"], item["pending_amount"], item["player_name"]))
+        ranking.sort(
+            key=lambda item: (
+                item["outstanding_amount"],
+                item["pending_amount"],
+                item["player_name"],
+            )
+        )
         payload = {
             "reference_month": reference_month,
             "ranking": ranking[: max(limit, 1)],

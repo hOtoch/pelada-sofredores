@@ -76,17 +76,24 @@ class GreedyTeamBalancer:
             return defensive_gap, Decimal(total_gap), average_gap, max(totals, default=0)
         return defensive_gap, average_gap, Decimal(total_gap), max(totals, default=0)
 
-    def _generate_greedy(self, players: list[BalanceablePlayer], team_count: int) -> list[_TeamSlot]:
+    def _generate_greedy(
+        self, players: list[BalanceablePlayer], team_count: int
+    ) -> list[_TeamSlot]:
         slots = self._build_slots(len(players), team_count)
         for player in players:
             available_slots = [slot for slot in slots if slot.can_receive()]
             if not available_slots:
                 break
-            slot = min(available_slots, key=lambda item: (item.total_overall, len(item.players), item.index))
+            slot = min(
+                available_slots,
+                key=lambda item: (item.total_overall, len(item.players), item.index),
+            )
             slot.add_player(player)
         return slots
 
-    def _generate_exact(self, players: list[BalanceablePlayer], team_count: int) -> list[_TeamSlot] | None:
+    def _generate_exact(
+        self, players: list[BalanceablePlayer], team_count: int
+    ) -> list[_TeamSlot] | None:
         if len(players) > self.EXACT_SEARCH_PLAYER_LIMIT:
             return None
 
@@ -146,8 +153,7 @@ class GreedyTeamBalancer:
 
         def defensive_counts() -> list[int]:
             return [
-                sum(1 for player in slot.players if self._is_defensive(player))
-                for slot in slots
+                sum(1 for player in slot.players if self._is_defensive(player)) for slot in slots
             ]
 
         def current_score() -> tuple[int, Decimal, Decimal, int]:
@@ -173,9 +179,8 @@ class GreedyTeamBalancer:
                             next_totals[left_index] += right_player.overall - left_player.overall
                             next_totals[right_index] += left_player.overall - right_player.overall
                             next_defensive_counts = defensive_counts()
-                            left_delta = (
-                                (1 if self._is_defensive(right_player) else 0)
-                                - (1 if self._is_defensive(left_player) else 0)
+                            left_delta = (1 if self._is_defensive(right_player) else 0) - (
+                                1 if self._is_defensive(left_player) else 0
                             )
                             right_delta = -left_delta
                             next_defensive_counts[left_index] += left_delta
@@ -188,7 +193,12 @@ class GreedyTeamBalancer:
                             )
                             if next_score < best_score:
                                 best_score = next_score
-                                best_move = (left_index, left_player_index, right_index, right_player_index)
+                                best_move = (
+                                    left_index,
+                                    left_player_index,
+                                    right_index,
+                                    right_player_index,
+                                )
 
             if best_move is not None:
                 left_index, left_player_index, right_index, right_player_index = best_move
@@ -221,11 +231,7 @@ class GreedyTeamBalancer:
         team_sizes = [slot.capacity for slot in slots]
 
         balanced_teams = tuple(slot.to_balanced_team() for slot in slots)
-        assigned_ids = [
-            player.id
-            for team in balanced_teams
-            for player in team.players
-        ]
+        assigned_ids = [player.id for team in balanced_teams for player in team.players]
         if len(assigned_ids) != len(set(assigned_ids)):
             raise ValueError("Team generation produced duplicate player assignments.")
 
@@ -234,8 +240,7 @@ class GreedyTeamBalancer:
         totals = [slot.total_overall for slot in slots]
         total_gap = max(totals) - min(totals) if totals else 0
         defensive_counts = [
-            sum(1 for player in slot.players if self._is_defensive(player))
-            for slot in slots
+            sum(1 for player in slot.players if self._is_defensive(player)) for slot in slots
         ]
         defensive_gap = max(defensive_counts) - min(defensive_counts) if defensive_counts else 0
 
@@ -253,4 +258,6 @@ class GreedyTeamBalancer:
             "config": request.config.__dict__,
         }
 
-        return TeamGenerationResult(teams=balanced_teams, average_overall_gap=gap, diagnostics=diagnostics)
+        return TeamGenerationResult(
+            teams=balanced_teams, average_overall_gap=gap, diagnostics=diagnostics
+        )

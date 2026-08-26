@@ -1,10 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
 import type { PlayerSummary } from "../domain/types";
-import type {
-  AccessAccountFormValues,
-  AccessAccountSummary,
-} from "../features/roster/contracts";
+import type { AccessAccountFormValues, AccessAccountSummary } from "../features/roster/contracts";
 import { themeTokens } from "../theme/tokens";
 
 type AccountsPageProps = {
@@ -107,7 +104,8 @@ export function AccountsPage({
         event.target instanceof HTMLInputElement && event.target.type === "checkbox"
           ? event.target.checked
           : event.target.value;
-      const value = field === "linkedPlayerId" ? (rawValue === "" ? null : String(rawValue)) : rawValue;
+      const value =
+        field === "linkedPlayerId" ? (rawValue === "" ? null : String(rawValue)) : rawValue;
       setFormValues((prev) => ({ ...prev, [field]: value }));
     };
 
@@ -152,7 +150,9 @@ export function AccountsPage({
           <p className="eyebrow">Acessos</p>
           <h2 style={{ fontFamily: themeTokens.fontFamily.heading }}>Contas de acesso</h2>
           <p className="muted">
-            {accounts.length > 0 ? `${accounts.length} conta(s) cadastrada(s)` : "Nenhuma conta criada ainda"}
+            {accounts.length > 0
+              ? `${accounts.length} conta(s) cadastrada(s)`
+              : "Nenhuma conta criada ainda"}
           </p>
         </div>
         {canEdit ? (
@@ -178,7 +178,9 @@ export function AccountsPage({
         {isLoading ? (
           <p className="empty-state">Carregando contas...</p>
         ) : accounts.length === 0 ? (
-          <p className="empty-state">Nenhuma conta cadastrada ainda. Crie a primeira para liberar o acesso.</p>
+          <p className="empty-state">
+            Nenhuma conta cadastrada ainda. Crie a primeira para liberar o acesso.
+          </p>
         ) : (
           accounts.map((account) => (
             <article key={account.id} className="glass-card account-card">
@@ -199,13 +201,19 @@ export function AccountsPage({
                 <span className={`status-chip ${account.isActive ? "paid" : "unpaid"}`}>
                   {account.isActive ? "Ativa" : "Inativa"}
                 </span>
-                <span className={`status-chip ${account.mustChangePassword ? "partial" : "exempt"}`}>
+                <span
+                  className={`status-chip ${account.mustChangePassword ? "partial" : "exempt"}`}
+                >
                   {account.mustChangePassword ? "Troca de senha pendente" : "Senha regular"}
                 </span>
               </div>
               {canEdit ? (
                 <div className="account-actions">
-                  <button type="button" className="ghost-button" onClick={() => openEditModal(account.id)}>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => openEditModal(account.id)}
+                  >
                     Editar conta
                   </button>
                   <button
@@ -267,7 +275,11 @@ export function AccountsPage({
               </label>
               <label>
                 Papel
-                <select className="input-field" value={formValues.role} onChange={handleFieldChange("role")}>
+                <select
+                  className="input-field"
+                  value={formValues.role}
+                  onChange={handleFieldChange("role")}
+                >
                   <option value="COMMON">Comum</option>
                   <option value="ADMIN">Administrador</option>
                 </select>
@@ -320,7 +332,11 @@ export function AccountsPage({
                   Cancelar
                 </button>
                 <button type="submit" className="primary-button" disabled={isSubmitting}>
-                  {isSubmitting ? "Salvando..." : editorMode === "create" ? "Criar conta" : "Salvar conta"}
+                  {isSubmitting
+                    ? "Salvando..."
+                    : editorMode === "create"
+                      ? "Criar conta"
+                      : "Salvar conta"}
                 </button>
               </div>
             </form>

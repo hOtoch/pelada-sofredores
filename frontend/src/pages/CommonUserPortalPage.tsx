@@ -91,16 +91,21 @@ export function CommonUserPortalPage({
   const monthOptions = useMemo(() => {
     const months = new Set([finance.referenceMonth]);
     transactions.forEach((transaction) => {
-      months.add(getMonthValue(transaction.referenceMonth) || getMonthValue(transaction.occurredOn));
+      months.add(
+        getMonthValue(transaction.referenceMonth) || getMonthValue(transaction.occurredOn),
+      );
     });
-    return Array.from(months).filter(Boolean).sort((left, right) => right.localeCompare(left));
+    return Array.from(months)
+      .filter(Boolean)
+      .sort((left, right) => right.localeCompare(left));
   }, [finance.referenceMonth, transactions]);
 
   const monthlyTransactions = useMemo(
     () =>
       transactions
         .filter((transaction) => {
-          const transactionMonth = getMonthValue(transaction.referenceMonth) || getMonthValue(transaction.occurredOn);
+          const transactionMonth =
+            getMonthValue(transaction.referenceMonth) || getMonthValue(transaction.occurredOn);
           return transactionMonth === selectedMonth;
         })
         .sort((left, right) => right.occurredOn.localeCompare(left.occurredOn)),
@@ -198,7 +203,9 @@ export function CommonUserPortalPage({
             <span>Pendente</span>
             <strong>{currencyFormatter.format(monthlySummary.pendingAmount)}</strong>
           </div>
-          <div className={`common-mini-stat ${monthlySummary.outstandingAmount > 0 ? "warning" : "positive"}`}>
+          <div
+            className={`common-mini-stat ${monthlySummary.outstandingAmount > 0 ? "warning" : "positive"}`}
+          >
             <span>Em aberto</span>
             <strong>{currencyFormatter.format(monthlySummary.outstandingAmount)}</strong>
           </div>
@@ -218,7 +225,8 @@ export function CommonUserPortalPage({
                   </small>
                 </div>
                 <span className={transaction.direction === "INFLOW" ? "positive" : "warning"}>
-                  {directionLabels[transaction.direction]} {currencyFormatter.format(transaction.amount)}
+                  {directionLabels[transaction.direction]}{" "}
+                  {currencyFormatter.format(transaction.amount)}
                 </span>
               </article>
             ))
@@ -267,7 +275,9 @@ export function CommonUserPortalPage({
                     </div>
                     <div className="common-roster-meta">
                       <span>{matchStatusLabel[match.status]}</span>
-                      {attendanceStatus ? <strong>{attendanceStatusLabel[attendanceStatus]}</strong> : null}
+                      {attendanceStatus ? (
+                        <strong>{attendanceStatusLabel[attendanceStatus]}</strong>
+                      ) : null}
                     </div>
                   </article>
                 );

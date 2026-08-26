@@ -350,7 +350,11 @@ function extractApiErrorMessage(data: unknown) {
     return String(data.detail);
   }
 
-  if ("non_field_errors" in data && Array.isArray(data.non_field_errors) && data.non_field_errors[0]) {
+  if (
+    "non_field_errors" in data &&
+    Array.isArray(data.non_field_errors) &&
+    data.non_field_errors[0]
+  ) {
     return String(data.non_field_errors[0]);
   }
 
@@ -845,7 +849,11 @@ export async function createUserAccount(token: string, values: AccessAccountForm
   return mapUserAccount(data);
 }
 
-export async function updateUserAccount(token: string, accountId: string, values: AccessAccountFormValues) {
+export async function updateUserAccount(
+  token: string,
+  accountId: string,
+  values: AccessAccountFormValues,
+) {
   const data = await request<RawUserAccount>(
     `/users/${accountId}/`,
     {
@@ -857,7 +865,11 @@ export async function updateUserAccount(token: string, accountId: string, values
   return mapUserAccount(data);
 }
 
-export async function resetUserAccountPassword(token: string, accountId: string, newPassword: string) {
+export async function resetUserAccountPassword(
+  token: string,
+  accountId: string,
+  newPassword: string,
+) {
   const data = await request<RawUserAccount>(
     `/users/${accountId}/reset-password/`,
     {
@@ -894,7 +906,11 @@ export async function getSeasonOverview(token: string) {
 }
 
 export async function getPresenceRanking(token: string, limit = 8) {
-  const data = await request<RawPresenceRanking>(`/analytics/presence-ranking/?limit=${limit}`, undefined, token);
+  const data = await request<RawPresenceRanking>(
+    `/analytics/presence-ranking/?limit=${limit}`,
+    undefined,
+    token,
+  );
   return mapPresenceRanking(data);
 }
 
@@ -917,7 +933,11 @@ export async function getPaymentRanking(token: string, referenceMonth?: string, 
 }
 
 export async function getSportsRanking(token: string, limit = 20) {
-  const data = await request<RawSportsRanking>(`/analytics/sports-ranking/?limit=${limit}`, undefined, token);
+  const data = await request<RawSportsRanking>(
+    `/analytics/sports-ranking/?limit=${limit}`,
+    undefined,
+    token,
+  );
   return mapSportsRanking(data);
 }
 
@@ -926,7 +946,11 @@ export async function logout(token: string) {
 }
 
 export async function getFinancialSummary(token: string) {
-  const data = await request<RawFinancialSummary>("/dashboard/financial-summary/", undefined, token);
+  const data = await request<RawFinancialSummary>(
+    "/dashboard/financial-summary/",
+    undefined,
+    token,
+  );
   return mapFinancialSummary(data);
 }
 
@@ -977,7 +1001,11 @@ export async function createTransaction(token: string, values: TransactionFormVa
   return mapTransaction(data);
 }
 
-export async function updateTransaction(token: string, transactionId: string, values: TransactionFormValues) {
+export async function updateTransaction(
+  token: string,
+  transactionId: string,
+  values: TransactionFormValues,
+) {
   const data = await request<RawTransaction>(
     `/transactions/${transactionId}/`,
     {
@@ -1050,7 +1078,11 @@ export async function updateMatch(token: string, matchId: string, values: MatchF
   return mapMatch(data);
 }
 
-export async function patchMatchStatus(token: string, matchId: string, status: MatchSummary["status"]) {
+export async function patchMatchStatus(
+  token: string,
+  matchId: string,
+  status: MatchSummary["status"],
+) {
   const data = await request<RawMatch>(
     `/matches/${matchId}/`,
     {
@@ -1122,7 +1154,12 @@ export async function clearGeneratedTeams(token: string, matchId: string) {
   return mapMatch(data);
 }
 
-export async function swapTeamPlayers(token: string, matchId: string, sourceAttendanceId: string, targetAttendanceId: string) {
+export async function swapTeamPlayers(
+  token: string,
+  matchId: string,
+  sourceAttendanceId: string,
+  targetAttendanceId: string,
+) {
   const data = await request<RawAttendance[]>(
     `/matches/${matchId}/swap-team-players/`,
     {

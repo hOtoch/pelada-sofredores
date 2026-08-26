@@ -200,7 +200,9 @@ export async function mockApiSession(page: Page, role: SessionRole) {
       return;
     }
 
-    await route.fulfill(jsonResponse({ detail: `Endpoint mockado ausente: ${method} ${path}` }, 404));
+    await route.fulfill(
+      jsonResponse({ detail: `Endpoint mockado ausente: ${method} ${path}` }, 404),
+    );
   });
 }
 

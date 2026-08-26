@@ -48,7 +48,7 @@ const formatMatchDateTime = (value: string) =>
 const escapeCsvCell = (value: string | number | null | undefined) => {
   const normalized = String(value ?? "");
   if (/[",;\n]/.test(normalized)) {
-    return `"${normalized.replace(/"/g, "\"\"")}"`;
+    return `"${normalized.replace(/"/g, '""')}"`;
   }
   return normalized;
 };
@@ -221,10 +221,7 @@ export function DashboardPage({
     [players],
   );
 
-  const matchById = useMemo(
-    () => new Map(matches.map((entry) => [entry.id, entry])),
-    [matches],
-  );
+  const matchById = useMemo(() => new Map(matches.map((entry) => [entry.id, entry])), [matches]);
 
   const guestFeeDebtTotal = useMemo(
     () => guestFeeDebts.reduce((total, entry) => total + entry.guestFeeOutstanding, 0),
@@ -324,7 +321,8 @@ export function DashboardPage({
         };
       })
       .sort((left, right) => {
-        const stateDiff = paymentStateOrder[left.paymentState] - paymentStateOrder[right.paymentState];
+        const stateDiff =
+          paymentStateOrder[left.paymentState] - paymentStateOrder[right.paymentState];
         if (stateDiff !== 0) {
           return stateDiff;
         }
@@ -334,7 +332,9 @@ export function DashboardPage({
 
   const monthlyFeeSnapshot = useMemo(() => {
     const paidCount = monthlyFeeStatuses.filter((status) => status.paymentState === "PAID").length;
-    const pendingCount = monthlyFeeStatuses.filter((status) => status.paymentState === "PARTIAL").length;
+    const pendingCount = monthlyFeeStatuses.filter(
+      (status) => status.paymentState === "PARTIAL",
+    ).length;
     const outstandingAmount = monthlyFeeStatuses.reduce(
       (total, status) => total + Math.max(status.expectedAmount - status.paidAmount, 0),
       0,
@@ -611,7 +611,10 @@ export function DashboardPage({
       buildCsvLine(["Peladas abertas", seasonOverview?.matchesOpen ?? ""]),
       buildCsvLine(["Mensalistas ativos", seasonOverview?.activeMembers ?? ""]),
       buildCsvLine(["Adimplencia media", `${adimplenceRate.toFixed(0)}%`]),
-      buildCsvLine(["Presenca media", presenceRankingData.length ? `${averageAttendanceRate.toFixed(0)}%` : ""]),
+      buildCsvLine([
+        "Presenca media",
+        presenceRankingData.length ? `${averageAttendanceRate.toFixed(0)}%` : "",
+      ]),
       buildCsvLine(["Em aberto no mes", formatCurrency(monthlyFeeSnapshot.outstandingAmount)]),
       "",
       ["Ranking presenca", "Confirmados", "Chamadas", "Taxa"].join(";"),
@@ -676,10 +679,18 @@ export function DashboardPage({
               Lançar
             </button>
           )}
-          <button type="button" className="ghost-button" onClick={() => handleExportSeasonReport("csv")}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => handleExportSeasonReport("csv")}
+          >
             CSV
           </button>
-          <button type="button" className="ghost-button" onClick={() => handleExportSeasonReport("json")}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => handleExportSeasonReport("json")}
+          >
             JSON
           </button>
           <button
@@ -702,11 +713,15 @@ export function DashboardPage({
           <div className="dashboard-flow-list">
             <div className="dashboard-flow-item positive">
               <span className="dashboard-flow-label">Entradas</span>
-              <strong className="dashboard-flow-value">{formatCurrency(summary.inflowTotal)}</strong>
+              <strong className="dashboard-flow-value">
+                {formatCurrency(summary.inflowTotal)}
+              </strong>
             </div>
             <div className="dashboard-flow-item negative">
               <span className="dashboard-flow-label">Saídas</span>
-              <strong className="dashboard-flow-value">{formatCurrency(summary.outflowTotal)}</strong>
+              <strong className="dashboard-flow-value">
+                {formatCurrency(summary.outflowTotal)}
+              </strong>
             </div>
           </div>
         </div>
@@ -724,7 +739,9 @@ export function DashboardPage({
         <div className="glass-card dashboard-summary-card">
           <h3>A receber</h3>
           <p>{formatCurrency(monthlyFeeSnapshot.outstandingAmount)}</p>
-          <small className="dashboard-summary-note">{formatPartialPaymentLabel(monthlyFeeSnapshot.pendingCount)}</small>
+          <small className="dashboard-summary-note">
+            {formatPartialPaymentLabel(monthlyFeeSnapshot.pendingCount)}
+          </small>
         </div>
         <div className="glass-card dashboard-summary-card">
           <h3>Adimplência</h3>
@@ -764,9 +781,7 @@ export function DashboardPage({
                   <div>
                     <strong>{entry.displayName}</strong>
                     <p className="muted">{matchLabel}</p>
-                    <p className="muted">
-                      Responsável: {entry.invitedByName ?? "Nao informado"}
-                    </p>
+                    <p className="muted">Responsável: {entry.invitedByName ?? "Nao informado"}</p>
                   </div>
                   <div className="guest-fee-actions">
                     <strong>{formatCurrency(entry.guestFeeOutstanding)}</strong>
@@ -838,7 +853,9 @@ export function DashboardPage({
                     <div className="dashboard-evolution-track">
                       <div
                         className="dashboard-evolution-fill positive"
-                        style={{ width: `${Math.min(100, (point.inflow / maxMonthlyFlow) * 100)}%` }}
+                        style={{
+                          width: `${Math.min(100, (point.inflow / maxMonthlyFlow) * 100)}%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -850,7 +867,9 @@ export function DashboardPage({
                     <div className="dashboard-evolution-track">
                       <div
                         className="dashboard-evolution-fill negative"
-                        style={{ width: `${Math.min(100, (point.outflow / maxMonthlyFlow) * 100)}%` }}
+                        style={{
+                          width: `${Math.min(100, (point.outflow / maxMonthlyFlow) * 100)}%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -877,10 +896,18 @@ export function DashboardPage({
           </label>
         </div>
         <div className="quick-actions">
-          <button type="button" className="ghost-button" onClick={() => setBillingMonth(getCurrentMonthValue())}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => setBillingMonth(getCurrentMonthValue())}
+          >
             Este mês
           </button>
-          <button type="button" className="ghost-button" onClick={() => setBillingMonth(getPreviousMonthValue())}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => setBillingMonth(getPreviousMonthValue())}
+          >
             Mês anterior
           </button>
         </div>
@@ -891,16 +918,26 @@ export function DashboardPage({
               <article key={status.playerId} className="monthly-fee-card">
                 <div className="monthly-fee-header">
                   <div>
-                    <h4>{status.playerNickname ? `${status.playerName} (${status.playerNickname})` : status.playerName}</h4>
+                    <h4>
+                      {status.playerNickname
+                        ? `${status.playerName} (${status.playerNickname})`
+                        : status.playerName}
+                    </h4>
                   </div>
                   <span className={`status-chip ${status.paymentState.toLowerCase()}`}>
                     {paymentStateLabels[status.paymentState]}
                   </span>
                 </div>
                 <div className="monthly-fee-metrics">
-                  <span>Mensalidade <strong>{formatCurrency(status.expectedAmount)}</strong></span>
-                  <span>Pago <strong>{formatCurrency(status.paidAmount)}</strong></span>
-                  <span>Pendente <strong>{formatCurrency(status.pendingAmount)}</strong></span>
+                  <span>
+                    Mensalidade <strong>{formatCurrency(status.expectedAmount)}</strong>
+                  </span>
+                  <span>
+                    Pago <strong>{formatCurrency(status.paidAmount)}</strong>
+                  </span>
+                  <span>
+                    Pendente <strong>{formatCurrency(status.pendingAmount)}</strong>
+                  </span>
                 </div>
                 {canManageCash && player && (
                   <div className="monthly-fee-actions">
@@ -933,10 +970,18 @@ export function DashboardPage({
           <div className="toolbar-header">
             <h3>Filtros</h3>
             <div className="quick-actions">
-              <button type="button" className="ghost-button" onClick={() => handleLedgerMonthFilter(getCurrentMonthValue())}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => handleLedgerMonthFilter(getCurrentMonthValue())}
+              >
                 Este mês
               </button>
-              <button type="button" className="ghost-button" onClick={() => handleLedgerMonthFilter(getPreviousMonthValue())}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => handleLedgerMonthFilter(getPreviousMonthValue())}
+              >
                 Mês anterior
               </button>
               <button type="button" className="ghost-button" onClick={handleClearLedgerFilters}>
@@ -956,7 +1001,11 @@ export function DashboardPage({
             </label>
             <label>
               Categoria
-              <select className="input-field" value={ledgerFilters.category} onChange={handleLedgerFilterChange("category")}>
+              <select
+                className="input-field"
+                value={ledgerFilters.category}
+                onChange={handleLedgerFilterChange("category")}
+              >
                 <option value="ALL">Todas</option>
                 {Object.entries(categoryLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -967,7 +1016,11 @@ export function DashboardPage({
             </label>
             <label>
               Status
-              <select className="input-field" value={ledgerFilters.status} onChange={handleLedgerFilterChange("status")}>
+              <select
+                className="input-field"
+                value={ledgerFilters.status}
+                onChange={handleLedgerFilterChange("status")}
+              >
                 <option value="ALL">Todos</option>
                 {Object.entries(statusLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -978,7 +1031,11 @@ export function DashboardPage({
             </label>
             <label>
               Mensalista
-              <select className="input-field" value={ledgerFilters.playerId} onChange={handleLedgerFilterChange("playerId")}>
+              <select
+                className="input-field"
+                value={ledgerFilters.playerId}
+                onChange={handleLedgerFilterChange("playerId")}
+              >
                 <option value="">Todos</option>
                 {memberOptions.map((player) => (
                   <option key={player.id} value={player.id}>
@@ -1100,14 +1157,22 @@ export function DashboardPage({
             <form className="form-grid" onSubmit={handleSubmit}>
               <label>
                 Direção
-                <select className="input-field" value={formValues.direction} onChange={handleFieldChange("direction")}>
+                <select
+                  className="input-field"
+                  value={formValues.direction}
+                  onChange={handleFieldChange("direction")}
+                >
                   <option value="INFLOW">{directionLabels.INFLOW}</option>
                   <option value="OUTFLOW">{directionLabels.OUTFLOW}</option>
                 </select>
               </label>
               <label>
                 Categoria
-                <select className="input-field" value={formValues.category} onChange={handleFieldChange("category")}>
+                <select
+                  className="input-field"
+                  value={formValues.category}
+                  onChange={handleFieldChange("category")}
+                >
                   {Object.entries(categoryLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -1117,7 +1182,11 @@ export function DashboardPage({
               </label>
               <label>
                 Status
-                <select className="input-field" value={formValues.status} onChange={handleFieldChange("status")}>
+                <select
+                  className="input-field"
+                  value={formValues.status}
+                  onChange={handleFieldChange("status")}
+                >
                   {Object.entries(statusLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -1175,7 +1244,9 @@ export function DashboardPage({
                   <option value="">Sem vínculo</option>
                   {memberOptions.map((player) => (
                     <option key={player.id} value={player.id}>
-                      {player.nickname ? `${player.fullName} (${player.nickname})` : player.fullName}
+                      {player.nickname
+                        ? `${player.fullName} (${player.nickname})`
+                        : player.fullName}
                     </option>
                   ))}
                 </select>

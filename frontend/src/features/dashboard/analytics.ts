@@ -1,11 +1,11 @@
-import type { TransactionCategory, TransactionDirection, TransactionRecord } from "../../domain/types";
+import type {
+  TransactionCategory,
+  TransactionDirection,
+  TransactionRecord,
+} from "../../domain/types";
 
 export type DashboardAnalyticsPeriod =
-  | "THIS_MONTH"
-  | "LAST_3_MONTHS"
-  | "LAST_6_MONTHS"
-  | "YEAR_TO_DATE"
-  | "ALL_TIME";
+  "THIS_MONTH" | "LAST_3_MONTHS" | "LAST_6_MONTHS" | "YEAR_TO_DATE" | "ALL_TIME";
 
 export interface DashboardAnalyticsPeriodOption {
   value: DashboardAnalyticsPeriod;
@@ -123,7 +123,15 @@ function firstOfMonth(value: Date) {
 }
 
 function addMonths(value: Date, delta: number) {
-  return new Date(value.getFullYear(), value.getMonth() + delta, FIRST_OF_MONTH_DAY, MONTH_HOUR, 0, 0, 0);
+  return new Date(
+    value.getFullYear(),
+    value.getMonth() + delta,
+    FIRST_OF_MONTH_DAY,
+    MONTH_HOUR,
+    0,
+    0,
+    0,
+  );
 }
 
 function getPeriodStart(period: DashboardAnalyticsPeriod, now: Date) {
@@ -227,8 +235,12 @@ export function computeDashboardAnalytics(
     inPeriod(parseISODate(transaction.occurredOn), periodStart, periodEnd),
   );
 
-  const postedTransactions = filteredTransactions.filter((transaction) => transaction.status === "POSTED");
-  const pendingTransactions = filteredTransactions.filter((transaction) => transaction.status === "PENDING");
+  const postedTransactions = filteredTransactions.filter(
+    (transaction) => transaction.status === "POSTED",
+  );
+  const pendingTransactions = filteredTransactions.filter(
+    (transaction) => transaction.status === "PENDING",
+  );
 
   const inflowPosted = postedTransactions
     .filter((transaction) => transaction.direction === "INFLOW")
@@ -238,10 +250,16 @@ export function computeDashboardAnalytics(
     .filter((transaction) => transaction.direction === "OUTFLOW")
     .reduce((total, transaction) => total + transaction.amount, 0);
 
-  const pendingTotal = pendingTransactions.reduce((total, transaction) => total + transaction.amount, 0);
+  const pendingTotal = pendingTransactions.reduce(
+    (total, transaction) => total + transaction.amount,
+    0,
+  );
   const postedBalance = inflowPosted - outflowPosted;
   const postedCount = postedTransactions.length;
-  const averageTicket = postedCount > 0 ? postedTransactions.reduce((total, tx) => total + tx.amount, 0) / postedCount : 0;
+  const averageTicket =
+    postedCount > 0
+      ? postedTransactions.reduce((total, tx) => total + tx.amount, 0) / postedCount
+      : 0;
   const coverageRatio = safeDivide(inflowPosted, outflowPosted);
 
   const monthlySeries = buildMonthSeries(filteredTransactions, periodStart, periodEnd);

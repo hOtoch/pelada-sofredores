@@ -30,7 +30,9 @@ export function MyAccountPage({
   onUpdateProfile,
   onChangePassword,
 }: MyAccountPageProps) {
-  const [profileValues, setProfileValues] = useState<AccountProfileFormValues>(() => toProfileValues(currentUser));
+  const [profileValues, setProfileValues] = useState<AccountProfileFormValues>(() =>
+    toProfileValues(currentUser),
+  );
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,8 +44,7 @@ export function MyAccountPage({
   }, [currentUser]);
 
   const handleProfileField =
-    (field: keyof AccountProfileFormValues) =>
-    (event: ChangeEvent<HTMLInputElement>) => {
+    (field: keyof AccountProfileFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
       setProfileValues((prev) => ({ ...prev, [field]: event.target.value }));
     };
 

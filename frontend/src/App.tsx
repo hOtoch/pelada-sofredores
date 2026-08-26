@@ -97,14 +97,7 @@ import {
 } from "./lib/api";
 
 type NavigationIcon =
-  | "finance"
-  | "roster"
-  | "accounts"
-  | "match"
-  | "ratings"
-  | "ranking"
-  | "portal"
-  | "my-account";
+  "finance" | "roster" | "accounts" | "match" | "ratings" | "ranking" | "portal" | "my-account";
 
 type NavigationItem = {
   label: string;
@@ -192,13 +185,11 @@ const getLatestArchivedMatch = (matches: MatchSummary[]) =>
     })[0] ?? null;
 
 const getOpenRatingWindowMatch = (matches: MatchSummary[]) =>
-  [...matches]
-    .filter(isRatingWindowOpen)
-    .sort((left, right) => {
-      const leftStartedAt = getRatingWindowStartedAt(left) ?? 0;
-      const rightStartedAt = getRatingWindowStartedAt(right) ?? 0;
-      return rightStartedAt - leftStartedAt || right.scheduledAt.localeCompare(left.scheduledAt);
-    })[0] ?? null;
+  [...matches].filter(isRatingWindowOpen).sort((left, right) => {
+    const leftStartedAt = getRatingWindowStartedAt(left) ?? 0;
+    const rightStartedAt = getRatingWindowStartedAt(right) ?? 0;
+    return rightStartedAt - leftStartedAt || right.scheduledAt.localeCompare(left.scheduledAt);
+  })[0] ?? null;
 
 function SidebarNavIcon({ icon }: { icon: NavigationIcon }) {
   switch (icon) {
@@ -379,13 +370,17 @@ export default function App() {
   const [guestFeeDebts, setGuestFeeDebts] = useState<AttendanceEntry[]>([]);
   const [players, setPlayers] = useState<PlayerSummary[]>([]);
   const [accounts, setAccounts] = useState<AccessAccountSummary[]>([]);
-  const [seasonOverview, setSeasonOverview] = useState<DashboardSeasonOverviewSnapshot | null>(null);
+  const [seasonOverview, setSeasonOverview] = useState<DashboardSeasonOverviewSnapshot | null>(
+    null,
+  );
   const [presenceRanking, setPresenceRanking] = useState<DashboardPresenceRankingEntry[]>([]);
   const [paymentRanking, setPaymentRanking] = useState<DashboardPaymentRankingEntry[]>([]);
   const [sportsRanking, setSportsRanking] = useState<SportsRankingSnapshot>(emptySportsRanking);
   const [portalLinkedPlayer, setPortalLinkedPlayer] = useState<PlayerSummary | null>(null);
   const [portalFinance, setPortalFinance] = useState<PersonalFinanceSnapshot>(emptyPortalFinance);
-  const [portalRecentAttendance, setPortalRecentAttendance] = useState<PersonalAttendanceSnapshot[]>([]);
+  const [portalRecentAttendance, setPortalRecentAttendance] = useState<
+    PersonalAttendanceSnapshot[]
+  >([]);
   const [portalUpcomingMatches, setPortalUpcomingMatches] = useState<UpcomingMatchSnapshot[]>([]);
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [currentMatch, setCurrentMatch] = useState<MatchSummary | null>(null);
@@ -448,14 +443,18 @@ export default function App() {
     ]);
     const latestArchivedMatch = getLatestArchivedMatch(allMatches);
     const openRatingWindowMatch = getOpenRatingWindowMatch(allMatches);
-    const currentSelectedMatch = currentMatch ? allMatches.find((entry) => entry.id === currentMatch.id) : null;
+    const currentSelectedMatch = currentMatch
+      ? allMatches.find((entry) => entry.id === currentMatch.id)
+      : null;
     const shouldPreferLatestArchivedMatch = location.pathname === "/ratings";
 
     const nextMatch =
       (preferredMatchId ? allMatches.find((entry) => entry.id === preferredMatchId) : null) ??
-      (shouldPreferLatestArchivedMatch ? latestArchivedMatch ?? currentSelectedMatch : currentSelectedMatch) ??
+      (shouldPreferLatestArchivedMatch
+        ? (latestArchivedMatch ?? currentSelectedMatch)
+        : currentSelectedMatch) ??
       (!shouldPreferLatestArchivedMatch ? openRatingWindowMatch : null) ??
-      (openMatch ? allMatches.find((entry) => entry.id === openMatch.id) ?? openMatch : null) ??
+      (openMatch ? (allMatches.find((entry) => entry.id === openMatch.id) ?? openMatch) : null) ??
       allMatches[0] ??
       null;
 
@@ -613,7 +612,9 @@ export default function App() {
         const visibleMatches = matchData.matches;
         const visibleCurrentMatch =
           currentUser.role === "COMMON"
-            ? visibleMatches.find((entry) => entry.id === matchData.selectedMatch?.id) ?? visibleMatches[0] ?? null
+            ? (visibleMatches.find((entry) => entry.id === matchData.selectedMatch?.id) ??
+              visibleMatches[0] ??
+              null)
             : matchData.selectedMatch;
 
         setMatches(visibleMatches);
@@ -632,7 +633,9 @@ export default function App() {
         applyAdminData(adminData);
       } catch (error) {
         if (!isCancelled) {
-          setScreenError(error instanceof Error ? error.message : "Nao foi possível sincronizar os dados.");
+          setScreenError(
+            error instanceof Error ? error.message : "Nao foi possível sincronizar os dados.",
+          );
         }
       } finally {
         if (!isCancelled) {
@@ -698,7 +701,9 @@ export default function App() {
         }
       } catch (error) {
         if (!isCancelled) {
-          setScreenError(error instanceof Error ? error.message : "Falha ao carregar a presença da pelada.");
+          setScreenError(
+            error instanceof Error ? error.message : "Falha ao carregar a presença da pelada.",
+          );
         }
       } finally {
         if (!isCancelled) {
@@ -1214,7 +1219,9 @@ export default function App() {
 
     try {
       const created = await createPlayerRequest(token, values);
-      setPlayers((prev) => [...prev, created].sort((left, right) => left.fullName.localeCompare(right.fullName)));
+      setPlayers((prev) =>
+        [...prev, created].sort((left, right) => left.fullName.localeCompare(right.fullName)),
+      );
       await refreshAdminDataState(token);
       reportSuccess("Jogador criado com sucesso.");
     } catch (error) {
@@ -1450,10 +1457,8 @@ export default function App() {
       const updated = await markGuestFeePaidRequest(token, attendanceId);
       const [cashFlow, ledger, nextGuestFeeDebts] = isAdmin
         ? await fetchFinancialData(token)
-        : [summary, transactions, guestFeeDebts] as const;
-      setAttendance((prev) =>
-        prev.map((entry) => (entry.id === attendanceId ? updated : entry)),
-      );
+        : ([summary, transactions, guestFeeDebts] as const);
+      setAttendance((prev) => prev.map((entry) => (entry.id === attendanceId ? updated : entry)));
       if (isAdmin) {
         setSummary(cashFlow);
         setTransactions(ledger);
@@ -1481,10 +1486,8 @@ export default function App() {
       const updated = await waiveGuestFeeRequest(token, attendanceId);
       const [cashFlow, ledger, nextGuestFeeDebts] = isAdmin
         ? await fetchFinancialData(token)
-        : [summary, transactions, guestFeeDebts] as const;
-      setAttendance((prev) =>
-        prev.map((entry) => (entry.id === attendanceId ? updated : entry)),
-      );
+        : ([summary, transactions, guestFeeDebts] as const);
+      setAttendance((prev) => prev.map((entry) => (entry.id === attendanceId ? updated : entry)));
       if (isAdmin) {
         setSummary(cashFlow);
         setTransactions(ledger);
@@ -1533,7 +1536,9 @@ export default function App() {
       setPlayers(squad);
       setMatches(visibleMatches);
       setCurrentMatch(
-        visibleMatches.find((entry) => entry.id === matchData.selectedMatch?.id) ?? visibleMatches[0] ?? null,
+        visibleMatches.find((entry) => entry.id === matchData.selectedMatch?.id) ??
+          visibleMatches[0] ??
+          null,
       );
       reportSuccess("Portal atualizado com sucesso.");
     } catch (error) {
@@ -1622,7 +1627,8 @@ export default function App() {
   const currentUserName = currentUser?.displayName || currentUser?.username || "Jogador";
   const attendancePlayerIds = new Set(attendance.map((entry) => entry.playerId).filter(Boolean));
   const availablePlayers = players.filter(
-    (player) => player.isActive && player.playerType === "MEMBER" && !attendancePlayerIds.has(player.id),
+    (player) =>
+      player.isActive && player.playerType === "MEMBER" && !attendancePlayerIds.has(player.id),
   );
   const responsiblePlayers = players.filter(
     (player) => player.isActive && player.playerType === "MEMBER",
@@ -1645,7 +1651,13 @@ export default function App() {
           {toasts.map((toast) => (
             <div key={toast.id} className={`toast-card ${toast.tone}`}>
               <div>
-                <strong>{toast.tone === "success" ? "Sucesso" : toast.tone === "warning" ? "Aviso" : "Erro"}</strong>
+                <strong>
+                  {toast.tone === "success"
+                    ? "Sucesso"
+                    : toast.tone === "warning"
+                      ? "Aviso"
+                      : "Erro"}
+                </strong>
                 <p>{toast.message}</p>
               </div>
               <button type="button" className="toast-close" onClick={() => dismissToast(toast.id)}>
@@ -1670,7 +1682,9 @@ export default function App() {
               <strong>{currentUserName}</strong>
               <small>@{currentUser.username}</small>
             </div>
-            <span className={`side-role-badge ${currentUser.role === "ADMIN" ? "admin" : "common"}`}>
+            <span
+              className={`side-role-badge ${currentUser.role === "ADMIN" ? "admin" : "common"}`}
+            >
               {roleLabels[currentUser.role]}
             </span>
           </div>
@@ -1734,19 +1748,23 @@ export default function App() {
         <Routes>
           <Route
             path="/login"
-            element={currentUser ? <Navigate to={isCommonUser ? "/portal" : "/dashboard"} replace /> : (
-              <LoginPage
-                isSubmitting={isSubmittingLogin}
-                isCreatingAccount={isCreatingPublicAccount}
-                errorMessage={loginError}
-                signupErrorMessage={signupError}
-                canCreateAccount
-                onSubmit={(values) => {
-                  void handleLogin(values.identifier, values.password);
-                }}
-                onCreateAccount={(values) => handlePublicSignup(values)}
-              />
-            )}
+            element={
+              currentUser ? (
+                <Navigate to={isCommonUser ? "/portal" : "/dashboard"} replace />
+              ) : (
+                <LoginPage
+                  isSubmitting={isSubmittingLogin}
+                  isCreatingAccount={isCreatingPublicAccount}
+                  errorMessage={loginError}
+                  signupErrorMessage={signupError}
+                  canCreateAccount
+                  onSubmit={(values) => {
+                    void handleLogin(values.identifier, values.password);
+                  }}
+                  onCreateAccount={(values) => handlePublicSignup(values)}
+                />
+              )
+            }
           />
           <Route
             path="/portal"
@@ -1788,7 +1806,9 @@ export default function App() {
                   isSubmittingGuestFee={isSubmittingAttendance}
                   canManageCash={isAdmin}
                   onAddTransaction={(values) => handleCreateTransaction(values)}
-                  onEditTransaction={(transactionId, values) => handleEditTransaction(transactionId, values)}
+                  onEditTransaction={(transactionId, values) =>
+                    handleEditTransaction(transactionId, values)
+                  }
                   onVoidTransaction={(transactionId) => handleVoidTransaction(transactionId)}
                   onMarkGuestFeePaid={(attendanceId) => handleMarkGuestFeePaid(attendanceId)}
                   onWaiveGuestFee={(attendanceId) => handleWaiveGuestFee(attendanceId)}
@@ -1796,7 +1816,7 @@ export default function App() {
                 />
               ) : (
                 <Navigate to="/portal" replace />
-              )
+              ),
             )}
           />
           <Route
@@ -1837,7 +1857,7 @@ export default function App() {
                   onEditPlayer={async () => undefined}
                   onTogglePlayerStatus={async () => undefined}
                 />
-              )
+              ),
             )}
           />
           <Route
@@ -1858,7 +1878,7 @@ export default function App() {
                 />
               ) : (
                 <Navigate to="/portal" replace />
-              )
+              ),
             )}
           />
           <Route
@@ -1922,7 +1942,7 @@ export default function App() {
                 onFinalizeRatings={() => handleFinalizeRatings()}
                 onRecalculateRatings={() => handleRecalculateRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
-              />
+              />,
             )}
           />
           <Route
@@ -1988,7 +2008,7 @@ export default function App() {
                 onFinalizeRatings={() => handleFinalizeRatings()}
                 onRecalculateRatings={() => handleRecalculateRatings()}
                 onSubmitPlayerRatings={(ratings) => handleSubmitPlayerRatings(ratings)}
-              />
+              />,
             )}
           />
           <Route

@@ -1,4 +1,5 @@
 """REST serializers aligned with the initial domain model."""
+
 import re
 from decimal import Decimal
 
@@ -187,7 +188,9 @@ class ChangePasswordSerializer(serializers.Serializer):
         if not user.check_password(current_password):
             raise serializers.ValidationError({"current_password": "Senha atual inválida."})
         if current_password == new_password:
-            raise serializers.ValidationError({"new_password": "A nova senha deve ser diferente da atual."})
+            raise serializers.ValidationError(
+                {"new_password": "A nova senha deve ser diferente da atual."}
+            )
 
         validate_password(new_password, user=user)
         return attrs
@@ -351,10 +354,7 @@ class MatchAttendanceSerializer(serializers.ModelSerializer):
         )
 
     def validate_invited_by(self, value):
-        if value and (
-            value.player_type != Player.PlayerType.MEMBER
-            or not value.is_active
-        ):
+        if value and (value.player_type != Player.PlayerType.MEMBER or not value.is_active):
             raise serializers.ValidationError("Selecione um jogador ativo do elenco.")
         return value
 

@@ -80,7 +80,10 @@ export interface PreMatchPageProps {
   onWaiveGuestFee: (attendanceId: string) => Promise<void> | void;
   onGenerateTeams: (teamCount: number) => Promise<void> | void;
   onClearGeneratedTeams: () => Promise<void> | void;
-  onSwapTeamPlayers: (sourceAttendanceId: string, targetAttendanceId: string) => Promise<void> | void;
+  onSwapTeamPlayers: (
+    sourceAttendanceId: string,
+    targetAttendanceId: string,
+  ) => Promise<void> | void;
   ratingState?: MatchPlayerRatingState | null;
   overallHistory?: OverallHistorySnapshot | null;
   onFinalizeRatings?: () => Promise<void> | void;
