@@ -88,17 +88,29 @@ export function LoginPage({
           <div className="login-art-copy">
             <p className="login-kicker">Sofredores F.C. · a votação está aberta</p>
             <h1 className="login-headline">Seu overall não mente.</h1>
-            <p className="login-subline">
-              Confirma presença, dá nota pra quem mereceu e descobre se o overall subiu ou se foi só
-              impressão sua.
-            </p>
           </div>
         </div>
 
         <div className="login-panel">
           <div className="login-box">
             <span className="login-jersey" aria-hidden="true">
-              27
+              <svg viewBox="0 0 32 32" role="presentation" focusable="false">
+                <g
+                  stroke="#16101f"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                >
+                  <path d="M21 14h2.5a3.5 3.5 0 0 1 0 7H21" />
+                  <path d="M8 12h13v13a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3z" fill="#f5f1fa" />
+                  <path d="M12 16v8M17 16v8" />
+                  <path
+                    d="M9.5 12a3.2 3.2 0 0 1 1.9-5.2 3.6 3.6 0 0 1 6.4-1.3A3.1 3.1 0 0 1 21 12z"
+                    fill="#fffdf7"
+                  />
+                </g>
+              </svg>
             </span>
             <div className="login-box-header">
               <img src={sofredoresLogo} alt="" className="login-box-logo" />
@@ -116,7 +128,7 @@ export function LoginPage({
                   value={values.identifier}
                   onChange={handleChange("identifier")}
                   className="input-field"
-                  placeholder="usuario ou celular"
+                  placeholder="Usuário ou celular"
                   autoComplete="username"
                 />
               </label>
@@ -127,7 +139,7 @@ export function LoginPage({
                   value={values.password}
                   onChange={handleChange("password")}
                   className="input-field"
-                  placeholder="a senha, nao o seu overall"
+                  placeholder="Esquece essa porra não"
                   autoComplete="current-password"
                 />
               </label>
