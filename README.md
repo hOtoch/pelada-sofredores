@@ -36,11 +36,23 @@ Observacoes:
 - O backend roda migrations automaticamente ao subir o container.
 - O frontend e servido por Nginx e faz proxy para `/api` e `/admin`.
 
+## Padroes de codigo
+
+As regras do projeto estao em `CLAUDE.md`. Ferramentas:
+
+- Backend: `ruff check .` e `ruff format .` (config em `backend/pyproject.toml`).
+- Frontend: `npm run lint`, `npm run format` e `npm run typecheck` dentro de `frontend/`.
+- Hooks: instale uma vez por clone com `pip install -r backend/requirements-dev.txt` e
+  `pre-commit install`. Rode em tudo com `pre-commit run --all-files`.
+- Para ignorar o commit de formatacao no blame:
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+
 ## CI
 
 O workflow em `.github/workflows/ci.yml` executa:
-- Backend: install, migrate com SQLite, `manage.py check` e `pytest`.
-- Frontend: install com `npm ci` e `npm run build`.
+- Backend: install, `ruff check`, `ruff format --check`, migrate com SQLite,
+  `manage.py check` e `pytest`.
+- Frontend: install com `npm ci`, `prettier --check`, `eslint`, `tsc --noEmit` e `npm run build`.
 
 ## E2E com Playwright
 
