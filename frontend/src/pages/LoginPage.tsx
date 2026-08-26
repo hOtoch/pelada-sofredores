@@ -34,6 +34,7 @@ export function LoginPage({
   const [values, setValues] = useState(initialValues);
   const [signupValues, setSignupValues] = useState(initialSignupValues);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
+  const [signupPasswordConfirmation, setSignupPasswordConfirmation] = useState("");
   const [localSignupError, setLocalSignupError] = useState<string>();
   // sorteada uma vez por visita, para nao trocar de frase a cada render
   const [footnote] = useState(pickLoginFootnote);
@@ -47,8 +48,17 @@ export function LoginPage({
   const handleSignupChange =
     (field: keyof SignupFormValues) => (event: ChangeEvent<HTMLInputElement>) => {
       setLocalSignupError(undefined);
-      setSignupValues((prev) => ({ ...prev, [field]: event.target.value }));
+      // o usuario nao aceita espaco, entao ele nem chega a ser digitado
+      const nextValue =
+        field === "username" ? event.target.value.replace(/\s/g, "") : event.target.value;
+      setSignupValues((prev) => ({ ...prev, [field]: nextValue }));
     };
+
+  const closeSignup = () => {
+    setLocalSignupError(undefined);
+    setSignupPasswordConfirmation("");
+    setIsSignupOpen(false);
+  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,7 +71,11 @@ export function LoginPage({
       return;
     }
     if (hasUsernameSpace(signupValues.username)) {
-      setLocalSignupError("O usuario nao pode conter espacos.");
+      setLocalSignupError("O usuário não pode conter espaços.");
+      return;
+    }
+    if (signupValues.password !== signupPasswordConfirmation) {
+      setLocalSignupError("As senhas não batem. Confere de novo.");
       return;
     }
     try {
@@ -178,18 +192,16 @@ export function LoginPage({
       {isSignupOpen && (
         <div className="modal-backdrop">
           <div className="modal-card glass-card login-signup-modal">
-            <div className="ledger-heading">
-              <h3>Virar sofredor</h3>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  setLocalSignupError(undefined);
-                  setIsSignupOpen(false);
-                }}
-              >
-                Fechar
-              </button>
+            <button type="button" className="ghost-button login-signup-close" onClick={closeSignup}>
+              Fechar
+            </button>
+            <div className="login-signup-header">
+              <img src={sofredoresLogo} alt="" className="login-signup-logo" />
+              <h3 className="login-signup-title">Quero ser um Sofredor</h3>
+              <p className="login-signup-tagline">
+                Que decisão de merda, hein? Prepara o emocional: aqui tem nota toda semana e ninguém
+                aceita a sua.
+              </p>
             </div>
             <form className="form-grid compact-grid" onSubmit={handleSignupSubmit}>
               <label className="form-span-2">
@@ -220,6 +232,7 @@ export function LoginPage({
                   value={signupValues.username}
                   onChange={handleSignupChange("username")}
                   autoComplete="username"
+                  placeholder="sem espaço, craque"
                   required
                 />
               </label>
@@ -234,18 +247,25 @@ export function LoginPage({
                   required
                 />
               </label>
+              <label className="form-span-2">
+                Confirmar senha
+                <input
+                  className="input-field"
+                  type="password"
+                  value={signupPasswordConfirmation}
+                  onChange={(event) => {
+                    setLocalSignupError(undefined);
+                    setSignupPasswordConfirmation(event.target.value);
+                  }}
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
               {(localSignupError || signupErrorMessage) && (
                 <p className="error-text form-span-2">{localSignupError || signupErrorMessage}</p>
               )}
               <div className="section-actions form-span-2">
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => {
-                    setLocalSignupError(undefined);
-                    setIsSignupOpen(false);
-                  }}
-                >
+                <button type="button" className="ghost-button" onClick={closeSignup}>
                   Cancelar
                 </button>
                 <button type="submit" className="primary-button" disabled={isCreatingAccount}>
