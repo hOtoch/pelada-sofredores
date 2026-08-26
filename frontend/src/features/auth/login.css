@@ -6,16 +6,31 @@
 .login-scene {
   --login-ink: #12081f;
   --login-sticker-shadow: 6px 6px 0 rgba(18, 8, 42, 0.9);
+  position: relative;
   display: grid;
   grid-template-columns: 1fr;
   width: 100%;
   min-height: 100vh;
 }
 
+/*
+ * Fundo desfocado da propria arte: preenche a tela toda sem esticar nem cortar
+ * o personagem. Fica fora do fluxo do grid por ser absoluto.
+ */
+.login-scene::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: url("../../assets/sofredor-hero-800.webp") center / cover no-repeat;
+  filter: blur(38px) saturate(1.1) brightness(0.5);
+}
+
 /* ---------- lado da arte ---------- */
 
 .login-art {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: flex-end;
   min-height: 42vh;
@@ -25,7 +40,7 @@
 .login-art-image {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -37,19 +52,19 @@
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   background: linear-gradient(
     180deg,
     rgba(18, 8, 31, 0.05) 0%,
     rgba(18, 8, 31, 0.42) 38%,
     rgba(18, 8, 31, 0.88) 66%,
-    var(--color-bg) 100%
+    rgba(18, 8, 31, 0.72) 100%
   );
 }
 
 .login-art-copy {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: grid;
   gap: 0.75rem;
   padding: 2rem 1.25rem 4.25rem;
