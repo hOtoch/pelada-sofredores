@@ -37,6 +37,7 @@ export const themeTokens = {
     danger: "#FCA5A5",
   },
   fontFamily: {
+    display: '"Bakbak One", "Space Grotesk", sans-serif',
     heading: '"Sora", "Space Grotesk", sans-serif',
     body: '"IBM Plex Sans", "Segoe UI", sans-serif',
     mono: '"IBM Plex Mono", monospace',

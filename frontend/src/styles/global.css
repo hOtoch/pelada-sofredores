@@ -8,6 +8,7 @@
   --color-text-secondary: #d3cfdd;
   --color-purple: #7c3aed;
   --color-purple-soft: #9663fa;
+  --font-display: "Bakbak One", "Space Grotesk", sans-serif;
   --font-heading: "Space Grotesk", "Sora", sans-serif;
   --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
 }
@@ -130,11 +131,9 @@ button {
 }
 
 .app-shell.login-route .main-area {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   min-height: 100vh;
-  padding: 2.5rem;
+  padding: 0;
 }
 
 .side-nav {
@@ -754,37 +753,6 @@ button {
 
 .analytics-kpi-card strong {
   font-size: 1.45rem;
-}
-
-.login-card {
-  width: min(560px, 100%);
-  padding: 2.7rem;
-  background:
-    radial-gradient(circle at top right, rgba(150, 99, 250, 0.18), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 22%), rgba(24, 20, 35, 0.86);
-}
-
-.login-brand-block {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-}
-
-.login-logo {
-  width: 112px;
-  height: 112px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.login-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.login-copy p {
-  margin: 0;
 }
 
 .dashboard-heading {
@@ -2626,16 +2594,6 @@ select.input-field option:checked {
 }
 
 @media (max-width: 900px) {
-  .login-brand-block {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .login-logo {
-    width: 96px;
-    height: 96px;
-  }
-
   .dashboard-heading {
     align-items: flex-start;
   }

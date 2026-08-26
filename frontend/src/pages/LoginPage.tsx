@@ -1,8 +1,10 @@
 import { useId, useState, type ChangeEvent, type FormEvent } from "react";
 
+import heroWide from "../assets/sofredor-hero-1200.webp";
+import heroNarrow from "../assets/sofredor-hero-800.webp";
 import sofredoresLogo from "../assets/sofredores-logo.png";
 import type { LoginFormValues, LoginPageProps, SignupFormValues } from "../features/auth/contracts";
-import { themeTokens } from "../theme/tokens";
+import "../features/auth/login.css";
 
 const initialValues: LoginFormValues = {
   identifier: "",
@@ -71,74 +73,99 @@ export function LoginPage({
 
   return (
     <>
-      <section className="glass-card login-card">
-        <div className="login-brand-block login-brand-block-minimal">
-          <img src={sofredoresLogo} alt="Sofredores 027" className="login-logo" />
-          <div className="login-copy">
-            <h1 style={{ fontFamily: themeTokens.fontFamily.heading, margin: 0 }}>
-              PELADINHA SOFREDORES
-            </h1>
+      <section className="login-scene">
+        <div className="login-art">
+          <img
+            className="login-art-image"
+            src={heroWide}
+            srcSet={`${heroNarrow} 800w, ${heroWide} 1200w`}
+            sizes="(min-width: 900px) 55vw, 100vw"
+            alt="Jogador do Sofredores F.C. cabeceando a bola de cigarro na boca, com a torcida ao fundo"
+          />
+          <div className="login-art-copy">
+            <p className="login-kicker">Sofredores F.C. · fundado no sufoco</p>
+            <h1 className="login-headline">Bora sofrer de novo?</h1>
+            <p className="login-subline">
+              Confirma presença, acerta a mensalidade e finge que treinou a semana toda.
+            </p>
           </div>
         </div>
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1.75rem" }}
-        >
-          <label>
-            Usuário ou celular
-            <input
-              type="text"
-              value={values.identifier}
-              onChange={handleChange("identifier")}
-              className="input-field"
-              placeholder="usuario ou celular"
-              autoComplete="username"
-            />
-          </label>
-          <label>
-            Senha
-            <input
-              type="password"
-              value={values.password}
-              onChange={handleChange("password")}
-              className="input-field"
-              placeholder="senha"
-              autoComplete="current-password"
-            />
-          </label>
-          <label className="checkbox-field" htmlFor={`${id}-remember`}>
-            <input
-              id={`${id}-remember`}
-              type="checkbox"
-              checked={values.rememberMe}
-              onChange={handleChange("rememberMe")}
-            />
-            Lembrar sessão
-          </label>
-          {errorMessage && <p className="error-text">{errorMessage}</p>}
-          <button type="submit" className="primary-button" disabled={isSubmitting}>
-            {isSubmitting ? "Validando..." : "Entrar"}
-          </button>
-          {canCreateAccount && (
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => {
-                setLocalSignupError(undefined);
-                setIsSignupOpen(true);
-              }}
-            >
-              Criar minha conta
-            </button>
-          )}
-        </form>
+
+        <div className="login-panel">
+          <div className="login-box">
+            <span className="login-jersey" aria-hidden="true">
+              27
+            </span>
+            <div className="login-box-header">
+              <img src={sofredoresLogo} alt="" className="login-box-logo" />
+              <div>
+                <h2 className="login-box-title">Vestiário</h2>
+                <p className="login-box-subtitle">Só quem está escalado passa desta tela.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="login-form">
+              <label>
+                Usuário ou celular
+                <input
+                  type="text"
+                  value={values.identifier}
+                  onChange={handleChange("identifier")}
+                  className="input-field"
+                  placeholder="usuario ou celular"
+                  autoComplete="username"
+                />
+              </label>
+              <label>
+                Senha
+                <input
+                  type="password"
+                  value={values.password}
+                  onChange={handleChange("password")}
+                  className="input-field"
+                  placeholder="aquela senha de sempre"
+                  autoComplete="current-password"
+                />
+              </label>
+              <label className="checkbox-field" htmlFor={`${id}-remember`}>
+                <input
+                  id={`${id}-remember`}
+                  type="checkbox"
+                  checked={values.rememberMe}
+                  onChange={handleChange("rememberMe")}
+                />
+                Continuar conectado
+              </label>
+              {errorMessage && <p className="error-text">{errorMessage}</p>}
+              <button type="submit" className="primary-button" disabled={isSubmitting}>
+                {isSubmitting ? "Aquecendo..." : "Entrar em campo"}
+              </button>
+              {canCreateAccount && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    setLocalSignupError(undefined);
+                    setIsSignupOpen(true);
+                  }}
+                >
+                  Ainda não sou sofredor
+                </button>
+              )}
+            </form>
+
+            <p className="login-footnote">
+              Cigarro no intervalo conta como aquecimento? Aqui a gente finge que sim.
+            </p>
+          </div>
+        </div>
       </section>
 
       {isSignupOpen && (
         <div className="modal-backdrop">
           <div className="modal-card glass-card login-signup-modal">
             <div className="ledger-heading">
-              <h3>Criar minha conta</h3>
+              <h3>Virar sofredor</h3>
               <button
                 type="button"
                 className="ghost-button"
