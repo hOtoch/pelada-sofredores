@@ -14,16 +14,19 @@
 }
 
 /*
- * Fundo desfocado da propria arte: preenche a tela toda sem esticar nem cortar
- * o personagem. Fica fora do fluxo do grid por ser absoluto.
+ * Fundo da cena: gradiente do roxo do clube com uma reticula de quadrinhos por
+ * cima, para preencher a tela sem esticar nem cortar o personagem. E so CSS,
+ * nao baixa imagem nenhuma. Fica fora do fluxo do grid por ser absoluto.
  */
 .login-scene::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: url("../../assets/sofredor-hero-800.webp") center / cover no-repeat;
-  filter: blur(38px) saturate(1.1) brightness(0.5);
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.07) 1.6px, transparent 1.7px) 0 0 / 15px 15px,
+    radial-gradient(circle at 74% 16%, rgba(124, 58, 237, 0.32), transparent 52%),
+    linear-gradient(155deg, #1d1231 0%, #17102a 52%, #100b1a 100%);
 }
 
 /* ---------- lado da arte ---------- */
