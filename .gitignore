@@ -221,3 +221,12 @@ frontend/test-results/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Dumps de banco (nunca versionar)
+*.sql
+*.dump
+!backend/**/migrations/*.sql
+
+# Caches de lint/format
+frontend/node_modules/.cache/
+.ruff_cache/
