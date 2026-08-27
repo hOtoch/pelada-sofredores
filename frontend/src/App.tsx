@@ -380,6 +380,7 @@ export default function App() {
   const [portalLinkedPlayer, setPortalLinkedPlayer] = useState<PlayerSummary | null>(null);
   const [portalFinance, setPortalFinance] = useState<PersonalFinanceSnapshot>(emptyPortalFinance);
   const [portalCash, setPortalCash] = useState<PortalCashSnapshot>(emptyPortalCash);
+  const [isNavOpen, setIsNavOpen] = useState(false);
   const [portalRecentAttendance, setPortalRecentAttendance] = useState<
     PersonalAttendanceSnapshot[]
   >([]);
@@ -1681,58 +1682,71 @@ export default function App() {
         </div>
       ) : null}
       {!isLoginRoute && currentUser && (
-        <aside className="side-nav">
-          <div className="brand">
-            <div className="brand-mark">
-              <img src={sofradoresLogo} alt="Sofredores 027" className="brand-logo" />
+        <aside className={`side-nav ${isNavOpen ? "open" : ""}`}>
+          <div className="side-nav-top">
+            <div className="brand">
+              <div className="brand-mark">
+                <img src={sofradoresLogo} alt="Sofredores 027" className="brand-logo" />
+              </div>
+              <div className="brand-copy">
+                <p>Peladinhas Sofredores</p>
+              </div>
             </div>
-            <div className="brand-copy">
-              <p>Peladinhas Sofredores</p>
-            </div>
-          </div>
-          <div className="side-user-card">
-            <div className="side-user-copy">
-              <strong>{currentUserName}</strong>
-              <small>@{currentUser.username}</small>
-            </div>
-            <span
-              className={`side-role-badge ${currentUser.role === "ADMIN" ? "admin" : "common"}`}
+            <button
+              type="button"
+              className="nav-toggle"
+              aria-expanded={isNavOpen}
+              aria-controls="side-nav-menu"
+              aria-label={isNavOpen ? "Fechar menu" : "Abrir menu"}
+              onClick={() => setIsNavOpen((prev) => !prev)}
             >
-              {roleLabels[currentUser.role]}
-            </span>
-          </div>
-          <nav className="nav-list">
-            {navigation.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
-              >
-                <span className="nav-link-icon">
-                  <SidebarNavIcon icon={item.icon} />
-                </span>
-                <span className="nav-link-copy">
-                  <span className="nav-label">{item.label}</span>
-                </span>
-              </NavLink>
-            ))}
-          </nav>
-          <div className="nav-footer">
-            <button type="button" className="ghost-button" onClick={handleLogout}>
-              Encerrar sessão
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                {isNavOpen ? (
+                  <path d="M6 6l12 12M18 6L6 18" />
+                ) : (
+                  <path d="M4 7h16M4 12h16M4 17h16" />
+                )}
+              </svg>
             </button>
+          </div>
+          <div className="side-nav-menu" id="side-nav-menu">
+            <div className="side-user-card">
+              <div className="side-user-copy">
+                <strong>{currentUserName}</strong>
+                <small>@{currentUser.username}</small>
+              </div>
+              <span
+                className={`side-role-badge ${currentUser.role === "ADMIN" ? "admin" : "common"}`}
+              >
+                {roleLabels[currentUser.role]}
+              </span>
+            </div>
+            <nav className="nav-list">
+              {navigation.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}
+                  onClick={() => setIsNavOpen(false)}
+                >
+                  <span className="nav-link-icon">
+                    <SidebarNavIcon icon={item.icon} />
+                  </span>
+                  <span className="nav-link-copy">
+                    <span className="nav-label">{item.label}</span>
+                  </span>
+                </NavLink>
+              ))}
+            </nav>
+            <div className="nav-footer">
+              <button type="button" className="ghost-button" onClick={handleLogout}>
+                Encerrar sessão
+              </button>
+            </div>
           </div>
         </aside>
       )}
       <main className="main-area">
-        {!isLoginRoute && currentUser && (
-          <header className="top-bar">
-            <div className="top-bar-pill">
-              <span>Bem-vindo, {currentUserName}</span>
-              <span className="dot" />
-            </div>
-          </header>
-        )}
         {screenError ? <div className="status-banner error">{screenError}</div> : null}
         {currentUser?.mustChangePassword && !isLoginRoute ? (
           <div className="status-banner warning">

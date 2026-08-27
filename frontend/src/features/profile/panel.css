@@ -321,13 +321,22 @@
 }
 
 @media (max-width: 640px) {
+  /* no celular o overall vira o centro da tela, com o nome logo acima */
   .panel-hero {
     grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0 0.75rem;
   }
 
   .panel-overall {
-    justify-items: start;
+    justify-items: center;
     min-width: 0;
+  }
+
+  .panel-overall-value {
+    font-size: clamp(4.2rem, 22vw, 6rem);
   }
 
   .panel-block {
