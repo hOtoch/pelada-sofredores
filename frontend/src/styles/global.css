@@ -1396,9 +1396,18 @@ button {
   height: auto;
 }
 
-/* com um jogador so nao ha o que espremer: o grafico cabe na largura da tela */
+/*
+ * Com um jogador so nao ha o que espremer: o grafico cabe na largura da tela e
+ * fica mais baixo, para nao dominar o painel.
+ */
 .overall-history-panel--focused .overall-history-chart {
   min-width: 0;
+}
+
+/* limita a largura em vez da altura: assim o desenho nao fica com tarja nas laterais */
+.overall-history-panel--focused .overall-history-chart-shell {
+  max-width: 620px;
+  margin-inline: auto;
 }
 
 .overall-history-plot {
