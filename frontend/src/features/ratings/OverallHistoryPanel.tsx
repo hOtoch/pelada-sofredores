@@ -1,8 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import type { OverallHistorySnapshot } from "../../domain/types";
+import { themeTokens } from "../../theme/tokens";
 
 const compactQuery = "(max-width: 640px)";
+
+const tierGradientId = "overall-tier-gradient";
+
+/* Mesmas faixas do numerao no painel: bronze, prata, ouro e diamante. */
+const overallTiers = [
+  { limit: 50.5, color: themeTokens.color.overallTier.bronze },
+  { limit: 70.5, color: themeTokens.color.overallTier.prata },
+  { limit: 85.5, color: themeTokens.color.overallTier.ouro },
+  { limit: Number.POSITIVE_INFINITY, color: themeTokens.color.overallTier.diamante },
+];
+
+const getOverallTierColor = (overall: number) =>
+  (overallTiers.find((tier) => overall <= tier.limit) ?? overallTiers[overallTiers.length - 1])
+    .color;
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString("pt-BR", {
@@ -190,6 +205,16 @@ export function OverallHistoryPanel({
       )
     : 0;
   const activePlayerId = hoveredPoint?.playerId ?? hoveredLegendPlayerId;
+  // Degrade com paradas secas nos limites das faixas: a linha troca de cor
+  // exatamente na altura em que o overall cruza o valor.
+  const offsetForOverall = (value: number) =>
+    Math.min(Math.max((yMax - value) / Math.max(yMax - yMin, 1), 0), 1);
+  const tierBands = [
+    { color: overallTiers[3].color, from: 0, to: offsetForOverall(85.5) },
+    { color: overallTiers[2].color, from: offsetForOverall(85.5), to: offsetForOverall(70.5) },
+    { color: overallTiers[1].color, from: offsetForOverall(70.5), to: offsetForOverall(50.5) },
+    { color: overallTiers[0].color, from: offsetForOverall(50.5), to: 1 },
+  ].filter((band) => band.to > band.from);
 
   return (
     <div
@@ -218,6 +243,25 @@ export function OverallHistoryPanel({
               role="img"
               aria-label="Histórico de overall dos mensalistas por pelada"
             >
+              {focusPlayerId ? (
+                <defs>
+                  <linearGradient
+                    id={tierGradientId}
+                    gradientUnits="userSpaceOnUse"
+                    x1={0}
+                    y1={margin.top}
+                    x2={0}
+                    y2={margin.top + plotHeight}
+                  >
+                    {tierBands.map((band) => (
+                      <Fragment key={band.color}>
+                        <stop offset={band.from} stopColor={band.color} />
+                        <stop offset={band.to} stopColor={band.color} />
+                      </Fragment>
+                    ))}
+                  </linearGradient>
+                </defs>
+              ) : null}
               <rect
                 x={margin.left}
                 y={margin.top}
@@ -297,7 +341,9 @@ export function OverallHistoryPanel({
                         className={`overall-history-line ${
                           isHoveredSeries ? "hovered" : isDimmedSeries ? "dimmed" : ""
                         }`}
-                        style={{ stroke: player.color }}
+                        style={{
+                          stroke: focusPlayerId ? `url(#${tierGradientId})` : player.color,
+                        }}
                       />
                     ) : null}
                     {player.values.map((overall, index) => {
@@ -321,7 +367,7 @@ export function OverallHistoryPanel({
                         matchId: historyMatch.matchId,
                         displayName: player.displayName,
                         overall,
-                        color: player.color,
+                        color: focusPlayerId ? getOverallTierColor(overall) : player.color,
                         scheduledAt: historyMatch.scheduledAt,
                         location: historyMatch.location,
                         x,
@@ -336,7 +382,9 @@ export function OverallHistoryPanel({
                             cy={y}
                             r={isHoveredPoint ? "7.2" : "4.6"}
                             className={`overall-history-point ${isHoveredPoint ? "hovered" : ""}`}
-                            style={{ fill: player.color }}
+                            style={{
+                              fill: focusPlayerId ? getOverallTierColor(overall) : player.color,
+                            }}
                           />
                           <circle
                             cx={x}

@@ -43,22 +43,22 @@
 
 /* faixas do overall: bronze ate 50, prata ate 70, ouro ate 85, diamante acima */
 .panel-overall-value.bronze {
-  color: #d08b4f;
+  color: var(--tier-bronze);
   text-shadow: 0 0 30px rgba(208, 139, 79, 0.45);
 }
 
 .panel-overall-value.prata {
-  color: #cbd5e1;
+  color: var(--tier-prata);
   text-shadow: 0 0 30px rgba(203, 213, 225, 0.4);
 }
 
 .panel-overall-value.ouro {
-  color: #fbbf24;
+  color: var(--tier-ouro);
   text-shadow: 0 0 32px rgba(251, 191, 36, 0.45);
 }
 
 .panel-overall-value.diamante {
-  color: #7dd3fc;
+  color: var(--tier-diamante);
   text-shadow: 0 0 34px rgba(125, 211, 252, 0.5);
 }
 

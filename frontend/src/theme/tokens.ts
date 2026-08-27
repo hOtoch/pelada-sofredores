@@ -32,6 +32,13 @@ export const themeTokens = {
     textSecondary: "#D3CFDD",
     accent: "#9663FA",
     accentStrong: "#7C3AED",
+    // faixas do overall: bronze ate 50, prata ate 70, ouro ate 85, diamante acima
+    overallTier: {
+      bronze: "#D08B4F",
+      prata: "#CBD5E1",
+      ouro: "#FBBF24",
+      diamante: "#7DD3FC",
+    },
     success: "#86EFAC",
     warning: "#FCD34D",
     danger: "#FCA5A5",
