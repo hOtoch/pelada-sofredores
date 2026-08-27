@@ -36,6 +36,20 @@ function getMonthValue(value?: string | null) {
   return value ? value.slice(0, 7) : "";
 }
 
+/** Faixa do overall, usada so para colorir o numero. */
+function getOverallTier(overall: number) {
+  if (overall <= 50) {
+    return "bronze";
+  }
+  if (overall <= 70) {
+    return "prata";
+  }
+  if (overall <= 85) {
+    return "ouro";
+  }
+  return "diamante";
+}
+
 export function CommonUserPortalPage({
   currentUser,
   linkedPlayer,
@@ -46,7 +60,6 @@ export function CommonUserPortalPage({
   transactions,
   matches,
   isLoading,
-  onRefresh,
 }: CommonUserPortalPageProps) {
   const [selectedMonth, setSelectedMonth] = useState(finance.referenceMonth);
 
@@ -123,6 +136,7 @@ export function CommonUserPortalPage({
   );
 
   const playerName = linkedPlayer?.nickname || linkedPlayer?.fullName || currentUser.displayName;
+  const overall = linkedPlayer?.ratings.overall ?? null;
 
   return (
     <section className="page-section panel-shell">
@@ -130,16 +144,14 @@ export function CommonUserPortalPage({
         <div className="panel-hero-identity">
           <p className="eyebrow">Painel</p>
           <h2>{playerName}</h2>
-          <div className="panel-chips">
-            <span className="panel-chip">@{currentUser.username}</span>
-            {linkedPlayer?.preferredPosition ? (
-              <span className="panel-chip">{linkedPlayer.preferredPosition}</span>
-            ) : null}
-          </div>
         </div>
 
         <div className="panel-overall">
-          <span className="panel-overall-value">{linkedPlayer?.ratings.overall ?? "--"}</span>
+          <span
+            className={`panel-overall-value ${overall === null ? "" : getOverallTier(overall)}`}
+          >
+            {overall ?? "--"}
+          </span>
           <span className="panel-overall-label">Overall</span>
           {overallDelta === null ? null : (
             <span
@@ -155,16 +167,6 @@ export function CommonUserPortalPage({
             </span>
           )}
         </div>
-
-        {onRefresh ? (
-          <button
-            type="button"
-            className="ghost-button panel-refresh"
-            onClick={() => void onRefresh()}
-          >
-            Atualizar
-          </button>
-        ) : null}
       </header>
 
       {isLoading ? <p className="empty-state">Sincronizando...</p> : null}
@@ -172,8 +174,8 @@ export function CommonUserPortalPage({
       <OverallHistoryPanel
         overallHistory={overallHistory}
         focusPlayerId={linkedPlayer?.id}
-        eyebrow="Evolução"
-        title="Seu overall pelada a pelada"
+        eyebrow={null}
+        title="Histórico do seu Overall"
       />
 
       <section className="glass-card panel-block">

@@ -68,7 +68,7 @@ export function OverallHistoryPanel({
 }: {
   overallHistory?: OverallHistorySnapshot | null;
   focusPlayerId?: string | null;
-  eyebrow?: string;
+  eyebrow?: string | null;
   title?: string;
 }) {
   const [hoveredPoint, setHoveredPoint] = useState<OverallHistoryHoverPoint | null>(null);
@@ -182,7 +182,7 @@ export function OverallHistoryPanel({
     >
       <div className="ledger-heading">
         <div>
-          <p className="eyebrow">{eyebrow}</p>
+          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
           <h3>{title}</h3>
           <small className="muted">
             {focusPlayerId
