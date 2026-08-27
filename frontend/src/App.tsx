@@ -145,11 +145,6 @@ const emptySportsRanking: SportsRankingSnapshot = {
 
 const currentReferenceMonth = () => new Date().toISOString().slice(0, 7);
 
-const matchStatusLabels: Record<MatchSummary["status"], string> = {
-  OPEN: "Pelada aberta",
-  ARCHIVED: "Pelada finalizada",
-};
-
 const roleLabels = {
   ADMIN: "Administrador",
   COMMON: "Jogador",
@@ -1705,25 +1700,6 @@ export default function App() {
             ))}
           </nav>
           <div className="nav-footer">
-            <div className="nav-context-card">
-              <p className="eyebrow">Pelada da vez</p>
-              <strong>
-                {currentMatch
-                  ? new Date(currentMatch.scheduledAt).toLocaleString("pt-BR", {
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })
-                  : "Nenhuma pelada selecionada"}
-              </strong>
-              <div className="nav-context-meta">
-                <small>{currentMatch?.location || "Defina em Pré-Jogo"}</small>
-                {currentMatch ? (
-                  <span className={`status-chip ${currentMatch.status.toLowerCase()}`}>
-                    {matchStatusLabels[currentMatch.status]}
-                  </span>
-                ) : null}
-              </div>
-            </div>
             <button type="button" className="ghost-button" onClick={handleLogout}>
               Encerrar sessão
             </button>
