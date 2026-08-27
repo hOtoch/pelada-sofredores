@@ -168,6 +168,8 @@ button {
   pointer-events: none;
 }
 
+/* Ate 900px a sidebar vira dropdown; acima disso ela e um painel fixo.
+   O mesmo valor esta em MOBILE_NAV_QUERY, no App.tsx. */
 .side-nav-top {
   display: flex;
   align-items: center;

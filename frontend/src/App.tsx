@@ -147,6 +147,9 @@ const emptySportsRanking: SportsRankingSnapshot = {
 
 const currentReferenceMonth = () => new Date().toISOString().slice(0, 7);
 
+/* O menu so vira dropdown ate esta largura; o mesmo valor esta no global.css. */
+const MOBILE_NAV_QUERY = "(max-width: 900px)";
+
 const roleLabels = {
   ADMIN: "Administrador",
   COMMON: "Jogador",
@@ -509,73 +512,75 @@ export default function App() {
     setPaymentRanking(adminData.paymentRanking);
   };
 
-  // Abertura do menu no celular. No desktop o bloco fica sempre visivel, entao
-  // qualquer estilo inline aplicado aqui e limpo.
+  /*
+   * A sidebar SO vira dropdown no celular (ate 900px). Do tablet grande para
+   * cima ela e um painel fixo: nenhum estilo de animacao pode sobrar nela, por
+   * isso o ramo de desktop limpa as propriedades na mao em vez de depender de
+   * revert de contexto — reverter reaplicava altura 0 e sumia com o menu.
+   */
   useEffect(() => {
     const menu = navMenuRef.current;
     if (!menu) {
       return;
     }
 
-    const mobileQuery = window.matchMedia("(max-width: 900px)");
+    const mobileQuery = window.matchMedia(MOBILE_NAV_QUERY);
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const animatedItems = ".side-user-card, .nav-link, .nav-footer";
 
     const applyState = () => {
-      const context = gsap.context(() => {
-        if (!mobileQuery.matches) {
-          gsap.set(menu, { clearProps: "all" });
-          return;
-        }
+      gsap.killTweensOf(menu);
+      gsap.killTweensOf(menu.querySelectorAll(animatedItems));
 
-        // na primeira renderizacao o estado inicial e aplicado sem animar
-        const isFirstRun = !hasAnimatedNavRef.current;
-        const duration = isFirstRun || prefersReducedMotion ? 0 : 0.6;
+      if (!mobileQuery.matches) {
+        gsap.set(menu, { clearProps: "height,opacity,visibility,transform" });
+        gsap.set(menu.querySelectorAll(animatedItems), {
+          clearProps: "opacity,visibility,transform",
+        });
+        return;
+      }
 
-        if (isNavOpen) {
-          gsap.fromTo(
-            menu,
-            { height: 0, autoAlpha: 0 },
-            { height: "auto", autoAlpha: 1, duration, ease: "power3.out" },
-          );
-          gsap.fromTo(
-            menu.querySelectorAll(".side-user-card, .nav-link, .nav-footer"),
-            { y: -12, autoAlpha: 0 },
-            {
-              y: 0,
-              autoAlpha: 1,
-              duration: duration ? 0.45 : 0,
-              stagger: duration ? 0.07 : 0,
-              ease: "power2.out",
-              delay: duration ? 0.12 : 0,
-              clearProps: "transform",
-            },
-          );
-        } else {
-          gsap.to(menu, {
-            height: 0,
-            autoAlpha: 0,
-            duration: duration ? 0.4 : 0,
-            ease: "power2.in",
-          });
-        }
+      // na primeira renderizacao o estado inicial e aplicado sem animar
+      const isFirstRun = !hasAnimatedNavRef.current;
+      const duration = isFirstRun || prefersReducedMotion ? 0 : 0.6;
+      hasAnimatedNavRef.current = true;
 
-        hasAnimatedNavRef.current = true;
-      }, menu);
+      if (!isNavOpen) {
+        gsap.to(menu, {
+          height: 0,
+          autoAlpha: 0,
+          duration: duration ? 0.4 : 0,
+          ease: "power2.in",
+        });
+        return;
+      }
 
-      return context;
+      gsap.fromTo(
+        menu,
+        { height: 0, autoAlpha: 0 },
+        { height: "auto", autoAlpha: 1, duration, ease: "power3.out" },
+      );
+      gsap.fromTo(
+        menu.querySelectorAll(animatedItems),
+        { y: -12, autoAlpha: 0 },
+        {
+          y: 0,
+          autoAlpha: 1,
+          duration: duration ? 0.45 : 0,
+          stagger: duration ? 0.07 : 0,
+          ease: "power2.out",
+          delay: duration ? 0.12 : 0,
+          clearProps: "transform",
+        },
+      );
     };
 
-    let context = applyState();
-    const handleBreakpointChange = () => {
-      context?.revert();
-      context = applyState();
-    };
-
-    mobileQuery.addEventListener("change", handleBreakpointChange);
+    applyState();
+    mobileQuery.addEventListener("change", applyState);
 
     return () => {
-      mobileQuery.removeEventListener("change", handleBreakpointChange);
-      context?.revert();
+      mobileQuery.removeEventListener("change", applyState);
+      gsap.killTweensOf(menu);
     };
     // currentUser entra nas dependencias porque o menu so existe depois do login
   }, [currentUser, isNavOpen]);
