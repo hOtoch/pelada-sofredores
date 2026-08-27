@@ -529,7 +529,7 @@ export default function App() {
 
         // na primeira renderizacao o estado inicial e aplicado sem animar
         const isFirstRun = !hasAnimatedNavRef.current;
-        const duration = isFirstRun || prefersReducedMotion ? 0 : 0.34;
+        const duration = isFirstRun || prefersReducedMotion ? 0 : 0.6;
 
         if (isNavOpen) {
           gsap.fromTo(
@@ -543,10 +543,10 @@ export default function App() {
             {
               y: 0,
               autoAlpha: 1,
-              duration: duration ? 0.26 : 0,
-              stagger: duration ? 0.04 : 0,
+              duration: duration ? 0.45 : 0,
+              stagger: duration ? 0.07 : 0,
               ease: "power2.out",
-              delay: duration ? 0.08 : 0,
+              delay: duration ? 0.12 : 0,
               clearProps: "transform",
             },
           );
@@ -554,7 +554,7 @@ export default function App() {
           gsap.to(menu, {
             height: 0,
             autoAlpha: 0,
-            duration: duration ? 0.22 : 0,
+            duration: duration ? 0.4 : 0,
             ease: "power2.in",
           });
         }
