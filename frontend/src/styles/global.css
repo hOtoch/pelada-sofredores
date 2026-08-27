@@ -2597,12 +2597,14 @@ select.input-field option:checked {
     display: inline-flex;
   }
 
+  /* a altura e a opacidade sao animadas pelo gsap; aqui so o recorte.
+     flex-grow precisa sair, senao o item estica e ignora a altura da animacao */
   .side-nav-menu {
-    display: none;
+    flex: 0 0 auto;
+    overflow: hidden;
   }
 
   .side-nav.open .side-nav-menu {
-    display: flex;
     padding-top: 0.25rem;
   }
 

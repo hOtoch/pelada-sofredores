@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import sofradoresLogo from "./assets/sofredores-logo.png";
@@ -381,6 +382,8 @@ export default function App() {
   const [portalFinance, setPortalFinance] = useState<PersonalFinanceSnapshot>(emptyPortalFinance);
   const [portalCash, setPortalCash] = useState<PortalCashSnapshot>(emptyPortalCash);
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const navMenuRef = useRef<HTMLDivElement>(null);
+  const hasAnimatedNavRef = useRef(false);
   const [portalRecentAttendance, setPortalRecentAttendance] = useState<
     PersonalAttendanceSnapshot[]
   >([]);
@@ -505,6 +508,77 @@ export default function App() {
     setPresenceRanking(adminData.presence);
     setPaymentRanking(adminData.paymentRanking);
   };
+
+  // Abertura do menu no celular. No desktop o bloco fica sempre visivel, entao
+  // qualquer estilo inline aplicado aqui e limpo.
+  useEffect(() => {
+    const menu = navMenuRef.current;
+    if (!menu) {
+      return;
+    }
+
+    const mobileQuery = window.matchMedia("(max-width: 900px)");
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const applyState = () => {
+      const context = gsap.context(() => {
+        if (!mobileQuery.matches) {
+          gsap.set(menu, { clearProps: "all" });
+          return;
+        }
+
+        // na primeira renderizacao o estado inicial e aplicado sem animar
+        const isFirstRun = !hasAnimatedNavRef.current;
+        const duration = isFirstRun || prefersReducedMotion ? 0 : 0.34;
+
+        if (isNavOpen) {
+          gsap.fromTo(
+            menu,
+            { height: 0, autoAlpha: 0 },
+            { height: "auto", autoAlpha: 1, duration, ease: "power3.out" },
+          );
+          gsap.fromTo(
+            menu.querySelectorAll(".side-user-card, .nav-link, .nav-footer"),
+            { y: -12, autoAlpha: 0 },
+            {
+              y: 0,
+              autoAlpha: 1,
+              duration: duration ? 0.26 : 0,
+              stagger: duration ? 0.04 : 0,
+              ease: "power2.out",
+              delay: duration ? 0.08 : 0,
+              clearProps: "transform",
+            },
+          );
+        } else {
+          gsap.to(menu, {
+            height: 0,
+            autoAlpha: 0,
+            duration: duration ? 0.22 : 0,
+            ease: "power2.in",
+          });
+        }
+
+        hasAnimatedNavRef.current = true;
+      }, menu);
+
+      return context;
+    };
+
+    let context = applyState();
+    const handleBreakpointChange = () => {
+      context?.revert();
+      context = applyState();
+    };
+
+    mobileQuery.addEventListener("change", handleBreakpointChange);
+
+    return () => {
+      mobileQuery.removeEventListener("change", handleBreakpointChange);
+      context?.revert();
+    };
+    // currentUser entra nas dependencias porque o menu so existe depois do login
+  }, [currentUser, isNavOpen]);
 
   useEffect(() => {
     if (!token) {
@@ -1709,7 +1783,7 @@ export default function App() {
               </svg>
             </button>
           </div>
-          <div className="side-nav-menu" id="side-nav-menu">
+          <div className="side-nav-menu" id="side-nav-menu" ref={navMenuRef}>
             <div className="side-user-card">
               <div className="side-user-copy">
                 <strong>{currentUserName}</strong>
