@@ -1404,12 +1404,6 @@ button {
   min-width: 0;
 }
 
-/* limita a largura em vez da altura: assim o desenho nao fica com tarja nas laterais */
-.overall-history-panel--focused .overall-history-chart-shell {
-  max-width: 620px;
-  margin-inline: auto;
-}
-
 .overall-history-plot {
   fill: rgba(255, 255, 255, 0.025);
   stroke: rgba(255, 255, 255, 0.08);

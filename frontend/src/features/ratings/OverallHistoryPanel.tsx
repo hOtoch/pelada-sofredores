@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { OverallHistorySnapshot } from "../../domain/types";
+
+const compactQuery = "(max-width: 640px)";
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString("pt-BR", {
@@ -72,7 +74,18 @@ export function OverallHistoryPanel({
   title?: string;
 }) {
   const [hoveredPoint, setHoveredPoint] = useState<OverallHistoryHoverPoint | null>(null);
+  const [isCompact, setIsCompact] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(compactQuery).matches,
+  );
   const [hoveredLegendPlayerId, setHoveredLegendPlayerId] = useState<string | null>(null);
+  useEffect(() => {
+    const query = window.matchMedia(compactQuery);
+    const update = () => setIsCompact(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
   const chartData = useMemo(() => {
     const matches = [...(overallHistory?.matches ?? [])].sort((left, right) =>
       left.scheduledAt.localeCompare(right.scheduledAt),
@@ -146,7 +159,9 @@ export function OverallHistoryPanel({
   }, [focusPlayerId, overallHistory]);
 
   const width = 960;
-  const height = 520;
+  // No modo de um jogador so o grafico e mais baixo, mas no celular a tela e
+  // estreita demais para isso: la ele volta a proporcao normal.
+  const height = focusPlayerId && !isCompact ? 330 : 520;
   const margin = { top: 34, right: 28, bottom: 68, left: 58 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
