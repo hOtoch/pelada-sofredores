@@ -1,0 +1,336 @@
+/*
+ * Painel do jogador comum: poucas caixas, numeros grandes e cor indicando
+ * situacao. Mobile-first — no celular tudo empilha em uma coluna.
+ */
+
+.panel-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ---------- topo com o overall em evidencia ---------- */
+
+.panel-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1rem 1.5rem;
+}
+
+.panel-hero-identity h2 {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 5vw, 2.3rem);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.panel-chip {
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+}
+
+.panel-overall {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  min-width: 7rem;
+}
+
+.panel-overall-value {
+  font-family: var(--font-display);
+  font-size: clamp(3.4rem, 12vw, 4.6rem);
+  line-height: 0.85;
+  color: var(--color-text-primary);
+  text-shadow: 0 0 32px rgba(150, 99, 250, 0.45);
+}
+
+.panel-overall-label {
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.panel-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.panel-delta.up {
+  background: rgba(134, 239, 172, 0.14);
+  color: #86efac;
+}
+
+.panel-delta.down {
+  background: rgba(252, 165, 165, 0.14);
+  color: #fca5a5;
+}
+
+.panel-delta.flat {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--color-text-secondary);
+}
+
+.panel-refresh {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+/* ---------- blocos ---------- */
+
+.panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.35rem;
+}
+
+.panel-block-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panel-block-heading h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.panel-muted {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+}
+
+.panel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.panel-status.ok {
+  color: #86efac;
+}
+
+.panel-status.warning {
+  color: #fcd34d;
+}
+
+.panel-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.06);
+}
+
+.panel-amount {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.panel-amount.ok,
+.panel-cash-main strong.ok {
+  color: #86efac;
+}
+
+.panel-amount.warning,
+.panel-cash-main strong.warning {
+  color: #fcd34d;
+}
+
+/* ---------- pendencias ---------- */
+
+.panel-pendency {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.panel-pendency-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panel-pendency-top strong {
+  display: block;
+}
+
+.panel-pendency-top small {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+}
+
+.panel-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.panel-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+.panel-progress span.ok {
+  background: #86efac;
+}
+
+.panel-progress span.warning {
+  background: #fcd34d;
+}
+
+.panel-guest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.panel-guest-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel-guest-row,
+.panel-extract-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.5rem 0;
+}
+
+.panel-guest-row + .panel-guest-row,
+.panel-extract-row + .panel-extract-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.panel-guest-row small,
+.panel-extract-row small {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+}
+
+/* ---------- caixa e extrato ---------- */
+
+.panel-cash {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.panel-cash-main span,
+.panel-cash-side span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.panel-cash-main strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 7vw, 2.6rem);
+  line-height: 1.05;
+}
+
+.panel-cash-side {
+  text-align: right;
+}
+
+.panel-cash-side strong {
+  font-family: var(--font-mono, monospace);
+  font-size: 1.05rem;
+  color: var(--color-text-primary);
+}
+
+.panel-extract {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.panel-extract-row > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-extract-row strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* barrinha colorida indicando entrada ou saida */
+.panel-flow {
+  width: 3px;
+  align-self: stretch;
+  min-height: 2rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.panel-flow.in {
+  background: #86efac;
+}
+
+.panel-flow.out {
+  background: #fca5a5;
+}
+
+@media (max-width: 640px) {
+  .panel-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-overall {
+    justify-items: start;
+    min-width: 0;
+  }
+
+  .panel-block {
+    padding: 1.1rem;
+  }
+}

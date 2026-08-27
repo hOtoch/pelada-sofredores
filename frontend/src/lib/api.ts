@@ -20,6 +20,7 @@ import type {
 import type {
   PersonalAttendanceSnapshot,
   PersonalFinanceSnapshot,
+  PortalCashSnapshot,
   UpcomingMatchSnapshot,
 } from "../features/profile/contracts";
 import type { AccountProfileFormValues } from "../features/auth/contracts";
@@ -264,6 +265,10 @@ type RawPortalOverview = {
   };
   recent_attendance: RawPortalRecentAttendanceItem[];
   upcoming_matches: RawPortalUpcomingMatchItem[];
+  cash: {
+    current_balance: number | string;
+    pending_total: number | string;
+  };
 };
 
 type RawSeasonOverview = {
@@ -791,6 +796,10 @@ export async function getPortalOverview(token: string) {
       outstandingBalance: toNumber(data.financial_status.outstanding_amount),
       referenceMonth: data.financial_status.reference_month,
     } satisfies PersonalFinanceSnapshot,
+    cash: {
+      currentBalance: toNumber(data.cash.current_balance),
+      pendingTotal: toNumber(data.cash.pending_total),
+    } satisfies PortalCashSnapshot,
     attendanceSummary: {
       confirmedCount: data.attendance_status.confirmed_count,
       pendingCount: data.attendance_status.pending_count,

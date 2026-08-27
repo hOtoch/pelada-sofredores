@@ -1698,56 +1698,58 @@ class AuthChangePasswordView(APIView):
         return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
+def build_cash_totals():
+    """Totais do caixa do grupo, usados pelo dashboard e pelo painel do jogador."""
+    totals = Transaction.objects.aggregate(
+        inflow_total=Coalesce(
+            Sum(
+                Case(
+                    When(
+                        direction=Transaction.Direction.INFLOW,
+                        status=Transaction.Status.POSTED,
+                        then=F("amount"),
+                    ),
+                    default=Value(0),
+                    output_field=DecimalField(max_digits=10, decimal_places=2),
+                )
+            ),
+            Decimal("0.00"),
+        ),
+        outflow_total=Coalesce(
+            Sum(
+                Case(
+                    When(
+                        direction=Transaction.Direction.OUTFLOW,
+                        status=Transaction.Status.POSTED,
+                        then=F("amount"),
+                    ),
+                    default=Value(0),
+                    output_field=DecimalField(max_digits=10, decimal_places=2),
+                )
+            ),
+            Decimal("0.00"),
+        ),
+        pending_total=Coalesce(
+            Sum(
+                Case(
+                    When(status=Transaction.Status.PENDING, then=F("amount")),
+                    default=Value(0),
+                    output_field=DecimalField(max_digits=10, decimal_places=2),
+                )
+            ),
+            Decimal("0.00"),
+        ),
+    )
+    totals["pending_total"] += get_guest_fee_pending_total()
+    totals["current_balance"] = totals["inflow_total"] - totals["outflow_total"]
+    return totals
+
+
 class FinancialSummaryView(APIView):
     permission_classes = [IsRoleAdmin]
 
     def get(self, request):
-        totals = Transaction.objects.aggregate(
-            inflow_total=Coalesce(
-                Sum(
-                    Case(
-                        When(
-                            direction=Transaction.Direction.INFLOW,
-                            status=Transaction.Status.POSTED,
-                            then=F("amount"),
-                        ),
-                        default=Value(0),
-                        output_field=DecimalField(max_digits=10, decimal_places=2),
-                    )
-                ),
-                Decimal("0.00"),
-            ),
-            outflow_total=Coalesce(
-                Sum(
-                    Case(
-                        When(
-                            direction=Transaction.Direction.OUTFLOW,
-                            status=Transaction.Status.POSTED,
-                            then=F("amount"),
-                        ),
-                        default=Value(0),
-                        output_field=DecimalField(max_digits=10, decimal_places=2),
-                    )
-                ),
-                Decimal("0.00"),
-            ),
-            pending_total=Coalesce(
-                Sum(
-                    Case(
-                        When(status=Transaction.Status.PENDING, then=F("amount")),
-                        default=Value(0),
-                        output_field=DecimalField(max_digits=10, decimal_places=2),
-                    )
-                ),
-                Decimal("0.00"),
-            ),
-        )
-        totals["pending_total"] += get_guest_fee_pending_total()
-        payload = {
-            "current_balance": totals["inflow_total"] - totals["outflow_total"],
-            **totals,
-        }
-        serializer = FinancialSummarySerializer(payload)
+        serializer = FinancialSummarySerializer(build_cash_totals())
         return Response(serializer.data)
 
 
@@ -1858,6 +1860,8 @@ class PortalOverviewView(APIView):
             for match in upcoming_matches
         ]
 
+        cash_totals = build_cash_totals()
+
         payload = {
             "user": user,
             "linked_player": linked_player,
@@ -1865,6 +1869,10 @@ class PortalOverviewView(APIView):
             "attendance_status": attendance_status,
             "recent_attendance": recent_attendance,
             "upcoming_matches": upcoming_payload,
+            "cash": {
+                "current_balance": cash_totals["current_balance"],
+                "pending_total": cash_totals["pending_total"],
+            },
         }
         serializer = PortalOverviewSerializer(payload)
         return Response(serializer.data)

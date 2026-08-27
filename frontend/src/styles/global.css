@@ -1396,6 +1396,11 @@ button {
   height: auto;
 }
 
+/* com um jogador so nao ha o que espremer: o grafico cabe na largura da tela */
+.overall-history-panel--focused .overall-history-chart {
+  min-width: 0;
+}
+
 .overall-history-plot {
   fill: rgba(255, 255, 255, 0.025);
   stroke: rgba(255, 255, 255, 0.08);

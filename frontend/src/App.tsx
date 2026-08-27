@@ -33,6 +33,7 @@ import type {
 import type {
   PersonalAttendanceSnapshot,
   PersonalFinanceSnapshot,
+  PortalCashSnapshot,
   RecentTeamSnapshot,
   UpcomingMatchSnapshot,
 } from "./features/profile/contracts";
@@ -116,7 +117,7 @@ const adminNavigation: NavigationItem[] = [
 ];
 
 const commonNavigation: NavigationItem[] = [
-  { label: "Extrato", path: "/portal", icon: "finance" },
+  { label: "Painel", path: "/portal", icon: "finance" },
   { label: "Elenco", path: "/roster", icon: "roster" },
   { label: "Peladas", path: "/pre-match", icon: "match" },
   { label: "Ranking", path: "/ranking", icon: "ranking" },
@@ -255,6 +256,11 @@ function SidebarNavIcon({ icon }: { icon: NavigationIcon }) {
   }
 }
 
+const emptyPortalCash: PortalCashSnapshot = {
+  currentBalance: 0,
+  pendingTotal: 0,
+};
+
 const emptyPortalFinance: PersonalFinanceSnapshot = {
   monthlyFeeAmount: 0,
   paidInReferenceMonth: 0,
@@ -373,6 +379,7 @@ export default function App() {
   const [sportsRanking, setSportsRanking] = useState<SportsRankingSnapshot>(emptySportsRanking);
   const [portalLinkedPlayer, setPortalLinkedPlayer] = useState<PlayerSummary | null>(null);
   const [portalFinance, setPortalFinance] = useState<PersonalFinanceSnapshot>(emptyPortalFinance);
+  const [portalCash, setPortalCash] = useState<PortalCashSnapshot>(emptyPortalCash);
   const [portalRecentAttendance, setPortalRecentAttendance] = useState<
     PersonalAttendanceSnapshot[]
   >([]);
@@ -510,6 +517,8 @@ export default function App() {
       setSportsRanking(emptySportsRanking);
       setPortalLinkedPlayer(null);
       setPortalFinance(emptyPortalFinance);
+      setPortalCash(emptyPortalCash);
+      setPortalCash(emptyPortalCash);
       setPortalRecentAttendance([]);
       setPortalUpcomingMatches([]);
       setIsAuthLoading(false);
@@ -573,7 +582,7 @@ export default function App() {
             : Promise.all([
                 Promise.resolve(emptyCashFlow),
                 listTransactions(token),
-                Promise.resolve([] as AttendanceEntry[]),
+                listGuestFeeDebts(token),
               ] as const);
 
         const [
@@ -617,11 +626,16 @@ export default function App() {
         if (portalData) {
           setPortalLinkedPlayer(portalData.linkedPlayer);
           setPortalFinance(portalData.finance);
+          setPortalCash(portalData.cash);
+          setPortalCash(portalData.cash);
           setPortalRecentAttendance(portalData.recentAttendance);
           setPortalUpcomingMatches(portalData.upcomingMatches);
         } else {
           setPortalLinkedPlayer(null);
           setPortalFinance(emptyPortalFinance);
+          setPortalCash(emptyPortalCash);
+          setPortalCash(emptyPortalCash);
+          setPortalCash(emptyPortalCash);
           setPortalRecentAttendance([]);
           setPortalUpcomingMatches([]);
         }
@@ -788,6 +802,7 @@ export default function App() {
     setSportsRanking(emptySportsRanking);
     setPortalLinkedPlayer(null);
     setPortalFinance(emptyPortalFinance);
+    setPortalCash(emptyPortalCash);
     setPortalRecentAttendance([]);
     setPortalUpcomingMatches([]);
     setMatches([]);
@@ -1516,18 +1531,21 @@ export default function App() {
     setScreenError(undefined);
 
     try {
-      const [portalData, matchData, personalLedger, squad] = await Promise.all([
+      const [portalData, matchData, personalLedger, squad, nextGuestFeeDebts] = await Promise.all([
         fetchPortalData(token),
         fetchMatchData(token),
         listTransactions(token),
         listPlayers(token),
+        listGuestFeeDebts(token),
       ]);
       const visibleMatches = matchData.matches;
       setPortalLinkedPlayer(portalData.linkedPlayer);
       setPortalFinance(portalData.finance);
+      setPortalCash(portalData.cash);
       setPortalRecentAttendance(portalData.recentAttendance);
       setPortalUpcomingMatches(portalData.upcomingMatches);
       setTransactions(personalLedger);
+      setGuestFeeDebts(nextGuestFeeDebts);
       setPlayers(squad);
       setMatches(visibleMatches);
       setCurrentMatch(
@@ -1750,6 +1768,9 @@ export default function App() {
                   currentUser={currentUser as AuthenticatedUser}
                   linkedPlayer={portalLinkedPlayer}
                   finance={portalFinance}
+                  cash={portalCash}
+                  overallHistory={overallHistory}
+                  guestDebts={guestFeeDebts}
                   transactions={transactions}
                   players={players}
                   matches={matches}

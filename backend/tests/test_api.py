@@ -866,6 +866,43 @@ class ApiFlowTests(APITestCase):
         )
         self.assertGreaterEqual(response.data["attendance_status"]["confirmed_count"], 1)
 
+    def test_common_user_portal_overview_exposes_group_cash(self) -> None:
+        self.common_user.linked_player = self.players[0]
+        self.common_user.save(update_fields=["linked_player"])
+        balance_before = Decimal(
+            self.client.get("/api/dashboard/financial-summary/").data["current_balance"]
+        )
+        Transaction.objects.create(
+            direction=Transaction.Direction.INFLOW,
+            category=Transaction.Category.MONTHLY_FEE,
+            status=Transaction.Status.POSTED,
+            amount=Decimal("200.00"),
+            description="Mensalidade de outro jogador",
+            occurred_on=date.today(),
+            related_player=self.players[1],
+            recorded_by=self.user,
+        )
+        Transaction.objects.create(
+            direction=Transaction.Direction.OUTFLOW,
+            category=Transaction.Category.FIELD_RENT,
+            status=Transaction.Status.POSTED,
+            amount=Decimal("50.00"),
+            description="Aluguel do campo",
+            occurred_on=date.today(),
+            recorded_by=self.user,
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.common_token.key}")
+
+        response = self.client.get("/api/portal/me/overview/")
+
+        self.assertEqual(response.status_code, 200)
+        # o saldo e do grupo inteiro, nao so dos lancamentos do proprio jogador
+        self.assertEqual(
+            Decimal(response.data["cash"]["current_balance"]) - balance_before,
+            Decimal("150.00"),
+        )
+        self.assertIn("pending_total", response.data["cash"])
+
     def test_admin_can_access_analytics_endpoints(self) -> None:
         season_response = self.client.get("/api/analytics/season-overview/")
         presence_response = self.client.get("/api/analytics/presence-ranking/?limit=3")

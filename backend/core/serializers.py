@@ -514,6 +514,11 @@ class PortalUpcomingMatchItemSerializer(serializers.Serializer):
     attendance_status = serializers.CharField(allow_null=True)
 
 
+class PortalCashSerializer(serializers.Serializer):
+    current_balance = serializers.DecimalField(max_digits=12, decimal_places=2)
+    pending_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
 class PortalOverviewSerializer(serializers.Serializer):
     user = UserSerializer()
     linked_player = PlayerSerializer(allow_null=True)
@@ -521,6 +526,7 @@ class PortalOverviewSerializer(serializers.Serializer):
     attendance_status = PortalAttendanceStatusSerializer()
     recent_attendance = PortalRecentAttendanceItemSerializer(many=True)
     upcoming_matches = PortalUpcomingMatchItemSerializer(many=True)
+    cash = PortalCashSerializer()
 
 
 class SeasonOverviewSerializer(serializers.Serializer):

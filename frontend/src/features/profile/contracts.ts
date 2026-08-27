@@ -1,10 +1,12 @@
 import type {
+  AttendanceEntry,
   AttendanceStatus,
   AuthenticatedUser,
   ISODateString,
   ISODateTimeString,
   MatchStatus,
   MatchSummary,
+  OverallHistorySnapshot,
   PlayerSummary,
   TransactionRecord,
 } from "../../domain/types";
@@ -16,6 +18,12 @@ export interface PersonalFinanceSnapshot {
   outstandingBalance: number;
   referenceMonth: ISODateString;
   lastPaymentOn?: ISODateString | null;
+}
+
+/** Caixa do grupo, exposto ao jogador comum pelo endpoint do portal. */
+export interface PortalCashSnapshot {
+  currentBalance: number;
+  pendingTotal: number;
 }
 
 export interface PersonalAttendanceSnapshot {
@@ -48,6 +56,10 @@ export interface CommonUserPortalPageProps {
   linkedPlayer?: PlayerSummary | null;
   finance: PersonalFinanceSnapshot;
   transactions: TransactionRecord[];
+  cash: PortalCashSnapshot;
+  overallHistory?: OverallHistorySnapshot | null;
+  /** Convidados com taxa pendente; a tela filtra os que este jogador levou. */
+  guestDebts: AttendanceEntry[];
   players: PlayerSummary[];
   matches: MatchSummary[];
   recentAttendance: PersonalAttendanceSnapshot[];
